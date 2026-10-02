@@ -162,26 +162,22 @@ jobs:
           attestations: true
           skip-existing: false
 
-  testpypi:
-    name: Rehearse on TestPyPI
+  testpypi-core:
+    name: Rehearse openstax-llm on TestPyPI
     needs: build
     if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
     runs-on: ubuntu-latest
+    # Distinct environment per project here too. TestPyPI runs the same warehouse code, so
+    # its pending-publisher uniqueness constraint covers
+    # (owner, repo, workflow, environment) and not the project name. One shared `testpypi`
+    # environment cannot carry two pending publishers, and the second registration would
+    # fail with a generic error.
     environment:
-      name: testpypi
+      name: testpypi-openstax-llm
       url: https://test.pypi.org/project/openstax-llm/
     permissions:
       id-token: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          version: "latest"
-          enable-cache: true
-
       - name: Download distributions
         uses: actions/download-artifact@v4
         with:
@@ -198,12 +194,44 @@ jobs:
           # Re-running a rehearsal is normal, and the version is disposable here.
           skip-existing: true
 
+  testpypi-mcp:
+    name: Rehearse openstax-llm-mcp on TestPyPI
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi-openstax-llm-mcp
+      url: https://test.pypi.org/project/openstax-llm-mcp/
+    permissions:
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
       - name: Publish openstax-llm-mcp to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: dist/openstax-llm-mcp/
           skip-existing: true
+
+  testpypi-verify:
+    name: Verify the TestPyPI rehearsal
+    needs: [testpypi-core, testpypi-mcp]
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
 
       - name: Confirm both projects actually landed on TestPyPI
         # Independent of the action's own exit status: ask the index.

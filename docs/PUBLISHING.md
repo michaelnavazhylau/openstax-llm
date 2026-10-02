@@ -63,7 +63,6 @@ scoped token. `release.yml` is already wired for this.
 
 **Register a pending publisher per project** at <https://pypi.org/manage/account/publishing/>.
 That is the **account** sidebar, not a project sidebar, because the projects do not exist yet.
-
 | Field | `openstax-llm` | `openstax-llm-mcp` |
 |---|---|---|
 | PyPI project name | `openstax-llm` | `openstax-llm-mcp` |
@@ -128,31 +127,53 @@ Option A. Option A avoids that chicken-and-egg entirely, which is one more reaso
 
 ## Rehearse on TestPyPI
 
-Register pending publishers at <https://test.pypi.org/manage/account/publishing/> using
-environment `testpypi`, then either:
+TestPyPI is the right place to prove the whole path before consuming a version on the real
+index, and it is worth doing once because it exercises the exact OIDC exchange, the upload
+endpoint, and a genuine consumer install.
 
-```
-Actions → Release → Run workflow → dry-run: false
-```
+Register **two** pending publishers at <https://test.pypi.org/manage/account/publishing/>,
+using the same owner/repo/workflow and **distinct** environments:
 
-…or locally:
+| PyPI project name | Environment |
+|---|---|
+| `openstax-llm` | `testpypi-openstax-llm` |
+| `openstax-llm-mcp` | `testpypi-openstax-llm-mcp` |
+
+TestPyPI runs the same warehouse code, so its pending-publisher uniqueness constraint has
+the same shape: one shared environment cannot carry two pending publishers, and the second
+registration fails with a generic error.
+
+> TestPyPI accounts are separate from PyPI accounts. If you have never used TestPyPI you
+> will need to register there first.
+
+Then dispatch the rehearsal:
 
 ```bash
-set -a && . ./pypi-creds.env && set +a
-UV_PUBLISH_TOKEN="$UV_PUBLISH_TOKEN_TESTPYPI" \
-  uv publish --publish-url https://test.pypi.org/legacy/ --package openstax-llm
+gh workflow run release.yml -f target=testpypi
+gh run watch
 ```
 
-Then confirm the MCP package installs and its entry point starts:
+The rehearsal uploads both projects, verifies each is present on the TestPyPI simple index
+at the expected version, then creates a fresh venv, installs `openstax-llm-mcp` from
+TestPyPI, and completes a real MCP handshake (`initialize` + `tools/list`, asserting the
+server name and `search_catalog`).
+
+To install the rehearsal build by hand:
 
 ```bash
-uv venv /tmp/verify
-uv pip install --python /tmp/verify/bin/python \
+uv venv /tmp/tp
+uv pip install --python /tmp/tp/bin/python \
   --index-url https://test.pypi.org/simple/ \
   --extra-index-url https://pypi.org/simple/ \
   openstax-llm-mcp
-/tmp/verify/bin/openstax-llm-mcp --version
+/tmp/tp/bin/openstax-llm-mcp --version
 ```
+
+`--extra-index-url` is needed because `openstax-md` lives on the real PyPI, not TestPyPI.
+
+The rehearsal uses `skip-existing: true`, so re-running it is safe. Nothing in it can reach
+the real PyPI: the `target=pypi` value is required for that, and `PYPI_PUBLISH_ENABLED` on
+top of it.
 
 ## Cut the release
 
