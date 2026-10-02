@@ -25,10 +25,12 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app
 
 # Layer 1: dependency resolution only. The manifests are copied without the sources so a
-# source edit does not invalidate the dependency cache.
+# source edit does not invalidate the dependency cache. The per-package READMEs have to
+# come along because hatchling reads them while building each member's metadata, even
+# under --no-install-project.
 COPY pyproject.toml uv.lock ./
-COPY packages/openstax-llm/pyproject.toml ./packages/openstax-llm/
-COPY packages/openstax-llm-mcp/pyproject.toml ./packages/openstax-llm-mcp/
+COPY packages/openstax-llm/pyproject.toml packages/openstax-llm/README.md ./packages/openstax-llm/
+COPY packages/openstax-llm-mcp/pyproject.toml packages/openstax-llm-mcp/README.md ./packages/openstax-llm-mcp/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 

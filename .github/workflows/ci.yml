@@ -100,7 +100,7 @@ jobs:
 
       - name: Verify the server answers an MCP initialize over HTTP
         run: |
-          docker run -d --name mcp -p 8765:8765 openstax-llm-mcp:ci
+          docker run -d --name mcp -p 127.0.0.1:8765:8765 openstax-llm-mcp:ci
 
           for _ in $(seq 1 30); do
             if curl -sf -o /dev/null -X POST http://127.0.0.1:8765/mcp \

@@ -40,6 +40,11 @@ openstax-llm-mcp = "openstax_llm_mcp.__main__:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# See the note in packages/openstax-llm/pyproject.toml: declaring this keeps metadata
+# generation independent of the source tree being present.
+[tool.hatch.build.targets.wheel]
+packages = ["src/openstax_llm_mcp"]
+
 # Resolve the sibling package from the workspace during development. This is a uv
 # concern only; the published metadata keeps the abstract `openstax-llm>=0.1.0`.
 [tool.uv.sources]
