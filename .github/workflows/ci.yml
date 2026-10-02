@@ -29,8 +29,8 @@ jobs:
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
-      - name: Install dependencies
-        run: uv sync --all-groups
+      - name: Install workspace
+        run: uv sync --all-groups --all-packages
 
       - name: Run linting (ruff check)
         run: uv run ruff check .
@@ -39,7 +39,113 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Run type checking (mypy)
-        run: uv run mypy src
+        run: uv run mypy
 
       - name: Run unit tests
         run: uv run pytest -v
+
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Build each workspace member into its own directory
+        run: |
+          uv build --package openstax-llm --out-dir dist/openstax-llm
+          uv build --package openstax-llm-mcp --out-dir dist/openstax-llm-mcp
+
+      - name: Check wheel metadata for PyPI blockers
+        # PyPI rejects direct URL dependencies server-side with a 400, and `twine check`
+        # does not catch it. Failing here is much cheaper than failing after a tag.
+        # openstax-llm is allowed to carry its openstax-md git dependency for now; the
+        # MCP distribution must stay completely clean. See docs/PUBLISHING.md.
+        run: >-
+          python scripts/check_wheel_metadata.py
+          --allow openstax-llm
+          dist/openstax-llm/*.whl dist/openstax-llm-mcp/*.whl
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+  docker:
+    name: Build MCP image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: openstax-llm-mcp:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify the server answers an MCP initialize over HTTP
+        run: |
+          docker run -d --name mcp -p 8765:8765 openstax-llm-mcp:ci
+
+          for _ in $(seq 1 30); do
+            if curl -sf -o /dev/null -X POST http://127.0.0.1:8765/mcp \
+              -H 'Content-Type: application/json' \
+              -H 'Accept: application/json, text/event-stream' \
+              -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}'; then
+              echo "server is up"
+              break
+            fi
+            sleep 2
+          done
+
+          response=$(curl -s -X POST http://127.0.0.1:8765/mcp \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}')
+
+          echo "$response"
+          echo "$response" | grep -q '"name":"openstax-llm"' || { echo "unexpected initialize result"; docker logs mcp; exit 1; }
+
+          docker rm -f mcp
+
+  cli-image:
+    name: Verify CLI entry point in the image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: openstax-llm-mcp:ci
+          cache-from: type=gha
+
+      - name: Run the CLI through the entrypoint override
+        # The image entrypoint is the MCP server, so the CLI needs --entrypoint. This
+        # checks that both console scripts survived packaging.
+        run: |
+          docker run --rm --entrypoint openstax-llm openstax-llm-mcp:ci --version
+          docker run --rm --entrypoint openstax-llm openstax-llm-mcp:ci --help
+          docker run --rm --entrypoint openstax-llm openstax-llm-mcp:ci search calculus

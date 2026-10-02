@@ -3,20 +3,20 @@
 ARG PYTHON_VERSION=3.12
 
 # -----------------------------------------------------------------------------
-# Stage 1: Build virtual environment with uv
+# Stage 1: Build the workspace virtual environment with uv
 # -----------------------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-slim-bookworm AS builder
 
-# Install uv binary from official Astral image
+# Install uv binary from the official Astral image
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Install git and ca-certificates (required to fetch git dependencies like openstax-md)
+# git and ca-certificates are required to fetch the openstax-md git dependency and to
+# clone textbooks on demand.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Configure uv: compile bytecode for faster startup, copy files, use container python
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
@@ -24,16 +24,17 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 WORKDIR /app
 
-# Cache dependencies: copy lockfile and project definition first
+# Layer 1: dependency resolution only. The manifests are copied without the sources so a
+# source edit does not invalidate the dependency cache.
 COPY pyproject.toml uv.lock ./
+COPY packages/openstax-llm/pyproject.toml ./packages/openstax-llm/
+COPY packages/openstax-llm-mcp/pyproject.toml ./packages/openstax-llm-mcp/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
-# Copy project metadata and source code
+# Layer 2: build and install both workspace members as wheels.
 COPY README.md LICENSE ./
-COPY src/ ./src/
-
-# Install the openstax-llm package as non-editable into the virtual environment
+COPY packages/ ./packages/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable
 
@@ -42,36 +43,42 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # -----------------------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
 
-LABEL org.opencontainers.image.title="openstax-llm" \
-      org.opencontainers.image.description="Pedagogical semantic chunking and RAG dataset preparation from OpenStax textbooks" \
+LABEL org.opencontainers.image.title="openstax-llm-mcp" \
+      org.opencontainers.image.description="MCP server for pedagogical OpenStax textbook chunking and RAG dataset preparation" \
       org.opencontainers.image.licenses="MIT"
 
-# Install git and ca-certificates (required by openstax-md for on-demand textbook cloning)
+# git is needed at runtime: the first use of a book clones its repository.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && git config --system --add safe.directory "*"
 
-# Create a non-root user
-RUN groupadd --gid 1000 appuser && \
-    useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash appuser && \
-    mkdir -p /home/appuser/.cache && \
-    chown -R appuser:appuser /home/appuser
+RUN groupadd --gid 1000 appuser \
+    && useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash appuser \
+    && mkdir -p /home/appuser/.cache \
+    && chown -R appuser:appuser /home/appuser
 
-# Copy virtual environment from builder stage
 COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 
-# Ensure virtualenv binaries are prioritized on PATH
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Prepare workspace directory for data mounts
+# /data is the writable workspace: the textbook clone cache and exported datasets live
+# under it, so mounting a volume there persists both.
 WORKDIR /data
-RUN mkdir -p /data && chown -R appuser:appuser /data && chmod 777 /data
+RUN mkdir -p /data && chown -R appuser:appuser /data
 
 USER appuser
 
-ENTRYPOINT ["openstax-llm"]
-CMD ["--help"]
+# The image defaults to the MCP server over streamable HTTP, which is what a container is
+# for. Use `--entrypoint openstax-llm` for the CLI:
+#   docker run --rm --entrypoint openstax-llm openstax-llm-mcp info astronomy-2e
+#
+# Clients that address the server by a hostname other than localhost need it allowed, or
+# DNS-rebinding protection answers 421:
+#   docker run -p 8765:8765 openstax-llm-mcp --http --host 0.0.0.0 \
+#     --allow-host textbooks.internal --allow-host textbooks.internal:*
+ENTRYPOINT ["openstax-llm-mcp"]
+CMD ["--http", "--host", "0.0.0.0", "--port", "8765", "--output-dir", "/data"]

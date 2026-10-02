@@ -1,0 +1,65 @@
+name: Skills
+
+# The skill is distributed by copying a directory and hashing it, so it can silently drift
+# from the library it documents. These checks run on their own because they are the
+# contract for `npx skills add`, independent of whether the Python tests pass.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "skills/**"
+      - "tests/test_skill_contract.py"
+      - ".github/workflows/skills.yml"
+  pull_request:
+    paths:
+      - "skills/**"
+      - "tests/test_skill_contract.py"
+      - ".github/workflows/skills.yml"
+  workflow_dispatch:
+
+jobs:
+  contract:
+    name: Skill contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Install workspace
+        run: uv sync --all-groups --all-packages
+
+      - name: Check the skill against the schema and package versions
+        run: uv run pytest tests/test_skill_contract.py -v
+
+  discoverable:
+    name: Discoverable by the skills CLI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: List skills in this repository
+        # This is the exact command a consumer runs to install. If discovery breaks, the
+        # skill stops being installable no matter how good its contents are.
+        run: |
+          output=$(npx --yes skills add . --list 2>&1)
+          echo "$output"
+          echo "$output" | grep -q "openstax-llm" || {
+            echo "::error::the skills CLI did not discover the openstax-llm skill"
+            exit 1
+          }
+          echo "$output" | grep -q "Found 1 skill" || {
+            echo "::error::expected exactly one skill in this repository"
+            exit 1
+          }

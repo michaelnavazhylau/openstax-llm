@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/michaelnavazhylau/openstax-llm/skills/openstax-llm/assets/chunk.schema.json",
+  "title": "openstax-llm chunk record",
+  "description": "One line of a JSONL dataset exported by openstax-llm. Every chunk retains enough provenance to be cited back to its source textbook.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "chunk_id",
+    "text",
+    "book_slug",
+    "book_title",
+    "chapter",
+    "section",
+    "section_title",
+    "chunk_type",
+    "word_count",
+    "token_est",
+    "metadata"
+  ],
+  "properties": {
+    "chunk_id": {
+      "type": "string",
+      "description": "Unique within a book. Formatted as '<section>-c<index>', e.g. '1.2-c003'. Falls back to 'chunk-<index>' when the module has no section number.",
+      "examples": ["1.2-c003", "chunk-001"]
+    },
+    "text": {
+      "type": "string",
+      "description": "Markdown source with intact LaTeX. Inline math uses $...$ and display math uses $$...$$; neither is ever split across a chunk boundary."
+    },
+    "book_slug": {
+      "type": "string",
+      "description": "Canonical OpenStax catalog slug.",
+      "examples": ["calculus-volume-1", "college-physics-2e"]
+    },
+    "book_title": {
+      "type": "string",
+      "description": "Human-readable textbook title."
+    },
+    "chapter": {
+      "type": "string",
+      "description": "Chapter number derived from the section hierarchy. Empty when the section has no dot.",
+      "examples": ["1", ""]
+    },
+    "section": {
+      "type": "string",
+      "description": "Section number, e.g. '1.2'. Empty for chunk text produced without a section.",
+      "examples": ["1.2"]
+    },
+    "section_title": {
+      "type": "string",
+      "description": "Human-readable title of the module the chunk came from.",
+      "examples": ["Review of Functions"]
+    },
+    "chunk_type": {
+      "type": "string",
+      "description": "Pedagogical role detected for the chunk. 'prose' is the fallback.",
+      "enum": ["prose", "example", "exercise", "definition", "summary"]
+    },
+    "word_count": {
+      "type": "integer",
+      "description": "Whitespace-delimited word count of 'text'.",
+      "minimum": 0
+    },
+    "token_est": {
+      "type": "integer",
+      "description": "Heuristic token estimate, computed as word_count * 1.3 for technical and mathematical text.",
+      "minimum": 0
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Extensible key-value bag for downstream vector indexes. Empty by default; openstax-llm itself writes nothing here.",
+      "default": {}
+    }
+  }
+}

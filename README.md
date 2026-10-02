@@ -6,127 +6,196 @@
 
 **Pedagogical semantic chunking, RAG dataset preparation, and LLM fine-tuning pipelines from OpenStax textbooks.**
 
-Built on top of [`openstax-md`](https://github.com/michaelnavazhylau/openstax-md), `openstax-llm` transforms rich OpenStax college textbooks into structured, citation-aware, formula-safe datasets for vector search (RAG) and model fine-tuning.
+Built on top of [`openstax-md`](https://github.com/michaelnavazhylau/openstax-md), `openstax-llm`
+transforms OpenStax college textbooks into structured, citation-aware, formula-safe datasets
+for vector search (RAG) and model fine-tuning.
+
+This repository ships three things that share one core:
+
+| Artifact | What it is | Entry point |
+|---|---|---|
+| [`openstax-llm`](packages/openstax-llm) | Python library and CLI | `openstax-llm` |
+| [`openstax-llm-mcp`](packages/openstax-llm-mcp) | Model Context Protocol server | `openstax-llm-mcp` |
+| [`skills/openstax-llm`](skills/openstax-llm) | Agent skill for coding assistants | `/skill:openstax-llm` |
 
 ---
 
 ## ⚡ Why openstax-llm?
 
-Generic chunkers (like simple character or recursive token splitters) break down on technical academic textbooks:
+Generic chunkers (simple character or recursive token splitters) break down on technical
+academic textbooks:
+
 - They cut mathematical formulas in half (`$x^2 + \dots$` split from `\dots + y^2$`).
-- They disassociate worked examples from their solutions.
-- They lose the chapter and section hierarchy needed for citations.
+- They separate worked examples from their solutions.
+- They lose the chapter and section hierarchy that citations depend on.
 
 `openstax-llm` provides:
-1. **Pedagogical Boundary Awareness**: Respects textbook structure—keeping Worked Examples (`Example 1.1`), Problem Sets, Definitions, and Section Summaries intact.
-2. **Formula Integrity**: Guarantees that inline and display LaTeX math equations are never split across chunk boundaries.
-3. **Docker-Style On-Demand Textbook Fetching**: Uses `openstax-md` to pull textbooks directly from the OpenStax catalog without manual cloning.
-4. **Out-of-the-Box RAG & Fine-Tuning Readiness**: Exports directly to JSONL format compatible with Chroma, Pinecone, Qdrant, LanceDB, LlamaIndex, LangChain, and Hugging Face `datasets`.
+
+1. **Pedagogical boundary awareness** — worked examples (`Example 1.1`), problem sets,
+   definitions, and summaries are kept whole.
+2. **Formula integrity** — a chunk boundary is never placed inside an unclosed `$...$` or
+   `$$...$$` block, or inside a fenced code block.
+3. **Enforced size ceiling** — `max_words` is actually honoured; oversized paragraphs are
+   split at sentence boundaries that lie outside math.
+4. **On-demand compilation** — any textbook in the OpenStax catalog (90 volumes and
+   counting) is pulled and chunked without manual data management.
+5. **Vector-store-ready output** — JSONL with globally unique `chunk_id`s, compatible with
+   Chroma, Qdrant, Pinecone, LanceDB, LlamaIndex, LangChain, and Hugging Face `datasets`.
 
 ---
 
 ## 🚀 Installation
 
-```bash
-# Add to your project with uv
-uv add git+https://github.com/michaelnavazhylau/openstax-llm.git
+`openstax-llm` is not on PyPI yet: it depends on `openstax-md` by Git URL, which PyPI
+rejects. See [docs/PUBLISHING.md](docs/PUBLISHING.md). Install from git in the meantime.
 
-# Or install with pip
-pip install git+https://github.com/michaelnavazhylau/openstax-llm.git
+```bash
+# Library + CLI
+uv add "git+https://github.com/michaelnavazhylau/openstax-llm.git#subdirectory=packages/openstax-llm"
+
+# CLI as a standalone tool
+uv tool install "git+https://github.com/michaelnavazhylau/openstax-llm.git#subdirectory=packages/openstax-llm"
 ```
 
-Or install as a standalone CLI tool:
+Or run the container:
 
 ```bash
-uv tool install git+https://github.com/michaelnavazhylau/openstax-llm.git
-```
-
-Or run via Docker without local Python installation:
-
-```bash
-docker build -t openstax-llm .
+docker build -t openstax-llm-mcp .
 ```
 
 ---
 
-## 💻 CLI Usage
+## 💻 CLI usage
 
 ```bash
-# 1. Search the catalog for available textbooks
+# Search the catalog for available textbooks
 openstax-llm search physics
 
-# 2. Inspect a textbook's chunk statistics
+# Inspect a textbook's chunk statistics and section index
 openstax-llm info astronomy-2e
 
-# 3. Prepare and chunk a textbook directly into a JSONL dataset
-openstax-llm prepare calculus-volume-1 -o datasets/calculus_v1.jsonl --target-words 400
+# Compile and chunk a textbook into a JSONL dataset
+openstax-llm prepare astronomy-2e -o datasets/astronomy-2e.jsonl
+
+# Verify an export before using it downstream
+openstax-llm validate datasets/astronomy-2e.jsonl
 ```
+
+`validate` checks formula integrity, `chunk_id` uniqueness, and provenance, and exits
+non-zero on structural errors. Add `--strict` to also fail on warnings such as front matter
+that has no section number. Always run it before loading a dataset into an index: a split
+formula that reaches an embedding store is very hard to detect afterwards.
 
 ---
 
-## 🐳 Docker Usage
-
-You can run `openstax-llm` in a container without configuring a local Python environment:
-
-```bash
-# Build the Docker image
-docker build -t openstax-llm .
-
-# Search the catalog
-docker run --rm openstax-llm search physics
-
-# Inspect textbook chunk statistics
-docker run --rm openstax-llm info astronomy-2e
-
-# Prepare a textbook and output JSONL to your current working directory
-docker run --rm -v $(pwd):/data openstax-llm prepare calculus-volume-1 -o calculus_v1.jsonl
-```
-
----
-
-## 🐍 Python SDK
+## 🐍 Library usage
 
 ```python
-from openstax_llm import TextBookDataset, prepare_textbook
+from openstax_llm import DocumentChunker, TextBookDataset
 
-# 1. Load, compile, and chunk directly from a catalog slug
-dataset = TextBookDataset.from_textbook("astronomy-2e")
-print(f"Loaded {len(dataset.chunks)} chunks across {dataset.total_words:,} words.")
+chunker = DocumentChunker(target_words=400, max_words=600, overlap_words=50)
+dataset = TextBookDataset.from_textbook("calculus-volume-1", chunker=chunker)
+dataset.to_jsonl("calculus.jsonl")
 
-# 2. Export to JSONL for vector databases
-dataset.to_jsonl("datasets/astronomy.jsonl")
-
-# 3. Access records programmatically
-for chunk in dataset.chunks[:3]:
-    print(f"[{chunk.chunk_id}] {chunk.section} ({chunk.chunk_type}): {chunk.text[:80]}...")
-
-# 4. Convert directly to Hugging Face dataset format
-records = dataset.to_records()
-# dataset = datasets.Dataset.from_list(records)
+print(dataset.summary())
+# {'book_slug': 'calculus-volume-1', 'total_chunks': 1445, 'total_words': 262184, ...}
 ```
 
-### Chunk Schema
+`DocumentChunker` also works on arbitrary markdown:
 
-Each JSONL record contains:
+```python
+from openstax_llm import DocumentChunker
 
-```json
-{
-  "chunk_id": "1.1-c002",
-  "text": "### Example 1.1: Finding the Domain of a Function\nConsider $f(x) = \\sqrt{x - 2}$...",
-  "book_slug": "calculus-volume-1",
-  "book_title": "Calculus Volume 1",
-  "chapter": "1",
-  "section": "1.1",
-  "section_title": "Functions and Their Graphs",
-  "chunk_type": "example",
-  "word_count": 184,
-  "token_est": 239,
-  "metadata": {}
-}
+chunks = DocumentChunker().chunk_markdown(
+    "## 1.2 Functions\n\nAn inline formula $f(x)=x^2$ stays intact.\n",
+    book_slug="my-notes",
+    section="1.2",
+    section_title="Functions",
+)
 ```
+
+---
+
+## 🤖 MCP server
+
+Exposes the same three operations to any MCP client over stdio or streamable HTTP.
+
+```bash
+# Register with Pi
+pi mcp add openstax-llm -- uvx --from "git+https://github.com/michaelnavazhylau/openstax-llm.git#subdirectory=packages/openstax-llm-mcp" openstax-llm-mcp
+
+# Or serve over HTTP
+docker run --rm -p 8765:8765 openstax-llm-mcp
+```
+
+| Tool | Purpose |
+|---|---|
+| `search_catalog(query, limit)` | Resolve a subject to a canonical slug (offline) |
+| `inspect_textbook(target)` | Chunk totals plus a per-section index |
+| `prepare_textbook(target, out)` | Export JSONL, sandboxed to the server's output directory |
+
+Resources: `textbook://<slug>` for an overview and `textbook://<slug>/<section>` for every
+chunk in one section. See [`packages/openstax-llm-mcp/README.md`](packages/openstax-llm-mcp/README.md)
+for options, tool schemas, and failure modes.
+
+---
+
+## 🧩 Agent skill
+
+```bash
+npx skills add michaelnavazhylau/openstax-llm
+```
+
+The skill teaches an agent *when* and *how* to reach for these tools: resolving slugs
+instead of guessing titles, verifying exports before indexing, tuning chunk sizes, and
+loading the result into Chroma, Qdrant, Pinecone, or Hugging Face. It deliberately contains
+no chunking logic of its own.
+
+---
+
+## 📦 Chunk schema
+
+| Field | Type | Description |
+|---|---|---|
+| `chunk_id` | `string` | Unique within a book: `<section>-c<index>`, e.g. `1.2-c003` |
+| `text` | `string` | Markdown with intact LaTeX math |
+| `book_slug` | `string` | Canonical OpenStax slug |
+| `book_title` | `string` | Human-readable title |
+| `chapter` | `string` | Chapter number from the section hierarchy |
+| `section` | `string` | Section number, e.g. `1.2` |
+| `section_title` | `string` | Module title |
+| `chunk_type` | `string` | `prose`, `example`, `exercise`, `definition`, `summary` |
+| `word_count` | `integer` | Whitespace-delimited word count |
+| `token_est` | `integer` | Heuristic estimate, `words * 1.3` |
+| `metadata` | `object` | Carries `module_id`; free for downstream use |
+
+Front matter — prefaces, formula tables, chapter introductions — has no section number. Its
+`chunk_id` is prefixed with the module id and its provenance lives in `metadata.module_id`.
+The machine-readable schema is at
+[`skills/openstax-llm/assets/chunk.schema.json`](skills/openstax-llm/assets/chunk.schema.json).
+
+---
+
+## 🛠️ Development
+
+```bash
+uv sync --all-groups --all-packages
+
+uv run pytest -v
+uv run ruff check . && uv run ruff format --check .
+uv run mypy
+
+# Real-textbook integration tests (clones a book, needs network)
+OPENSTAX_LLM_NETWORK_TESTS=1 uv run pytest tests/test_integration.py -v
+```
+
+The repository is a uv workspace: the root `pyproject.toml` declares members and owns the
+shared tool configuration, while each package under `packages/` is independently
+distributable. See [AGENTS.md](AGENTS.md) for the architecture and engineering invariants,
+and [docs/PUBLISHING.md](docs/PUBLISHING.md) for the release process.
 
 ---
 
 ## 📄 License
 
-MIT License. OpenStax textbooks are licensed by Rice University under CC BY-NC-SA 4.0.
+MIT

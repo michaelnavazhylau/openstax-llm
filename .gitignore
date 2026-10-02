@@ -40,3 +40,17 @@ htmlcov/
 datasets/
 *.jsonl
 .scratch_build/
+
+# Installed skills
+# `npx skills add` copies the canonical skills/ folder into the agents' directories and
+# symlinks the rest, so every one of these is a build artifact. skills/ is the source of
+# truth and IS committed. `skills-lock.json` is deliberately NOT committed: it is a lock for
+# a project that *consumes* skills, and this repository publishes rather than consumes any.
+.agents/skills/
+.claude/skills/
+.codex/skills/
+.cursor/skills/
+.pi/skills/
+.continue/skills/
+.opencode/skills/
+.windsurf/skills/

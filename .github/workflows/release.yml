@@ -1,0 +1,214 @@
+name: Release
+
+# Triggered by publishing a GitHub Release, so the tag is cut once and every artifact
+# derives from it.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Build and verify only; never upload
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and attach distributions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to attach artifacts to the release
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Verify the tag matches the package versions
+        # A tag that disagrees with pyproject.toml produces a release whose artifacts do
+        # not match its own name, and PyPI cannot take an upload back.
+        if: github.event_name == 'release'
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          core=$(python3 -c "
+          import tomllib, pathlib
+          print(tomllib.loads(pathlib.Path('packages/openstax-llm/pyproject.toml').read_text())['project']['version'])
+          ")
+          mcp=$(python3 -c "
+          import tomllib, pathlib
+          print(tomllib.loads(pathlib.Path('packages/openstax-llm-mcp/pyproject.toml').read_text())['project']['version'])
+          ")
+          echo "tag=$tag core=$core mcp=$mcp"
+          if [ "$tag" != "$core" ] || [ "$tag" != "$mcp" ]; then
+            echo "::error::tag '$tag' does not match package versions (core=$core, mcp=$mcp)"
+            exit 1
+          fi
+
+      - name: Build each workspace member into its own directory
+        # Separate directories matter: PyPI Trusted Publishing scopes a token per project
+        # via the GitHub environment, so each project needs its own upload step.
+        run: |
+          uv build --package openstax-llm --out-dir dist/openstax-llm
+          uv build --package openstax-llm-mcp --out-dir dist/openstax-llm-mcp
+
+      - name: Check wheel metadata for PyPI blockers
+        id: metadata
+        # openstax-llm cannot be uploaded while it depends on openstax-md by git URL: PyPI
+        # rejects direct URL dependencies with a 400. This is expected to be red until
+        # openstax-md is itself on PyPI. The release still completes and still attaches
+        # the wheels; the publish jobs simply do not run.
+        continue-on-error: true
+        run: python scripts/check_wheel_metadata.py dist/openstax-llm/*.whl dist/openstax-llm-mcp/*.whl
+
+      - name: Upload distributions as workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+      - name: Attach distributions to the GitHub Release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${GITHUB_REF_NAME}" dist/openstax-llm/* dist/openstax-llm-mcp/* --clobber
+
+      - name: Report uploadability
+        run: |
+          if [ "${{ steps.metadata.outcome }}" = "success" ]; then
+            echo "Artifacts are PyPI-clean; publish jobs will run if enabled." >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### Artifacts are not PyPI-uploadable yet"
+              echo
+              echo 'At least one wheel declares a PEP 508 direct URL dependency, which PyPI'
+              echo "rejects server-side. See \`docs/PUBLISHING.md\`. The GitHub Release still"
+              echo "has the wheels and sdists attached, so \`uvx --from <release asset>\` works."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+    outputs:
+      metadata_ok: ${{ steps.metadata.outcome }}
+
+  publish-core:
+    name: Publish openstax-llm
+    needs: build
+    # Two independent switches, both required: the artifacts must be free of direct URL
+    # dependencies, and the repository variable must be set so that enabling publishing is
+    # a deliberate, auditable change rather than a side effect of cutting a release.
+    if: >-
+      needs.build.outputs.metadata_ok == 'success'
+      && vars.PYPI_PUBLISH_ENABLED == 'true'
+      && (github.event_name == 'release' || inputs.dry-run == false)
+    runs-on: ubuntu-latest
+    # This environment name must match the trusted publisher registered on PyPI for
+    # openstax-llm, and it must DIFFER from the MCP project's environment: PyPI's pending
+    # publisher uniqueness constraint covers (owner, repo, workflow, environment) and not
+    # the project name, so two projects sharing all four cannot both be registered.
+    environment:
+      name: pypi-openstax-llm
+      url: https://pypi.org/project/openstax-llm/
+    permissions:
+      id-token: write # OIDC token for PyPI Trusted Publishing; no API token needed
+      attestations: write # build provenance
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/openstax-llm/
+          attestations: true
+          # Uploading a version that already exists is an error, and a partially uploaded
+          # release cannot be retried. Fail loudly rather than skipping.
+          skip-existing: false
+
+  publish-mcp:
+    name: Publish openstax-llm-mcp
+    needs: build
+    if: >-
+      needs.build.outputs.metadata_ok == 'success'
+      && vars.PYPI_PUBLISH_ENABLED == 'true'
+      && (github.event_name == 'release' || inputs.dry-run == false)
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi-openstax-llm-mcp
+      url: https://pypi.org/project/openstax-llm-mcp/
+    permissions:
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/openstax-llm-mcp/
+          attestations: true
+          skip-existing: false
+
+  testpypi:
+    name: Rehearse on TestPyPI
+    needs: build
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && inputs.dry-run == false
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/openstax-llm/
+    permissions:
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+      - name: Publish openstax-llm to TestPyPI
+        # Any direct URL dependency would be rejected here too, which is the point of
+        # rehearsing: it surfaces the metadata problem before a real release.
+        continue-on-error: true
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/openstax-llm/
+          skip-existing: true
+
+      - name: Publish openstax-llm-mcp to TestPyPI
+        continue-on-error: true
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/openstax-llm-mcp/
+          skip-existing: true
+
+      - name: Verify the MCP package installs from TestPyPI
+        # --index-url points only at TestPyPI, which cannot satisfy openstax-llm until it
+        # is published there too, so this reports rather than gates.
+        continue-on-error: true
+        run: |
+          uv venv /tmp/verify
+          uv pip install --python /tmp/verify/bin/python \
+            --index-url https://test.pypi.org/simple/ \
+            --extra-index-url https://pypi.org/simple/ \
+            "openstax-llm-mcp==$(python3 -c "
+          import tomllib, pathlib
+          print(tomllib.loads(pathlib.Path('packages/openstax-llm-mcp/pyproject.toml').read_text())['project']['version'])
+          ")"
+          /tmp/verify/bin/openstax-llm-mcp --version

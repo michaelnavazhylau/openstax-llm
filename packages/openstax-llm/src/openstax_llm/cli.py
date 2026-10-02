@@ -12,6 +12,7 @@ import openstax_md as osm
 from openstax_llm import __version__
 from openstax_llm.chunker import DocumentChunker
 from openstax_llm.dataset import TextBookDataset
+from openstax_llm.validate import errors_only, summarize_problems, validate_chunks
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -45,6 +46,21 @@ def build_parser() -> argparse.ArgumentParser:
     info = subparsers.add_parser("info", help="Inspect chunk statistics for a textbook")
     info.add_argument("target", help="Textbook slug or path")
     info.add_argument("--json", action="store_true", help="Output summary in JSON format")
+
+    # validate
+    validate = subparsers.add_parser(
+        "validate", help="Check an exported JSONL dataset for structural defects"
+    )
+    validate.add_argument("path", type=Path, help="Path to a JSONL dataset")
+    validate.add_argument(
+        "--strict",
+        action="store_true",
+        help="Treat provenance warnings (such as front matter without a section) as failures",
+    )
+    validate.add_argument(
+        "--limit", type=int, default=20, help="Maximum problems to print (default: 20)"
+    )
+    validate.add_argument("--json", action="store_true", help="Output the report as JSON")
 
     # search
     search = subparsers.add_parser("search", help="Search the catalog for available textbooks")
@@ -91,6 +107,65 @@ def main(argv: list[str] | None = None) -> int:
             for c_type, count in s["chunk_types"].items():
                 print(f"  - {c_type:12}: {count}")
         return 0
+
+    if args.command == "validate":
+        dataset = TextBookDataset.from_jsonl(args.path)
+        problems = validate_chunks(dataset.chunks)
+        errors = errors_only(problems)
+        failed = bool(errors) or (args.strict and bool(problems))
+
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "path": str(args.path),
+                        "book_slug": dataset.book_slug,
+                        "chunks": len(dataset.chunks),
+                        "ok": not failed,
+                        "counts": summarize_problems(problems),
+                        "problems": [
+                            {
+                                "chunk_id": problem.chunk_id,
+                                "kind": problem.kind,
+                                "severity": problem.severity,
+                                "detail": problem.detail,
+                            }
+                            for problem in problems[: args.limit]
+                        ],
+                    },
+                    indent=2,
+                )
+            )
+            return 1 if failed else 0
+
+        print(f"Book:   {dataset.book_title} ({dataset.book_slug})")
+        print(f"Chunks: {len(dataset.chunks):,}")
+
+        if not problems:
+            print("OK: formulas intact, chunk ids unique, provenance present")
+            return 0
+
+        counts = summarize_problems(problems)
+        print("Problems:")
+        for kind, count in sorted(counts.items()):
+            print(f"  - {kind:16}: {count}")
+        print()
+        for problem in problems[: args.limit]:
+            print(f"  [{problem.severity}] {problem}")
+        if len(problems) > args.limit:
+            print(f"  ... {len(problems) - args.limit} more (raise --limit to see them)")
+
+        if failed:
+            print()
+            print(
+                "FAILED: structural errors found"
+                if errors
+                else "FAILED: --strict and warnings present"
+            )
+        else:
+            print()
+            print("OK with warnings: no structural errors; provenance gaps listed above")
+        return 1 if failed else 0
 
     if args.command == "search":
         results = osm.search(args.query)

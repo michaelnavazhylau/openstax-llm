@@ -1,40 +1,36 @@
+# Workspace root for the openstax-llm project.
+#
+# This root is intentionally *not* a distributable package (`package = false`). It exists to:
+#   1. declare the uv workspace members under `packages/`,
+#   2. hold the single shared lockfile (`uv.lock`),
+#   3. host the shared ruff / mypy / pytest configuration for every member.
+#
+# Distributable artifacts live in:
+#   packages/openstax-llm      -> "openstax-llm"      (library + CLI)
+#   packages/openstax-llm-mcp  -> "openstax-llm-mcp"  (Model Context Protocol server)
+
 [project]
-name = "openstax-llm"
-version = "0.1.0"
-description = "LLM dataset preparation, pedagogical semantic chunking, and RAG ingestion from OpenStax textbooks"
-readme = "README.md"
+name = "openstax-llm-workspace"
+version = "0.0.0"
+description = "Workspace root for the openstax-llm library, MCP server, and agent skill"
 requires-python = ">=3.10"
-license = { text = "MIT" }
-authors = [
-    { name = "Michael Navazhylau", email = "mikipux7@gmail.com" }
-]
-classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
-    "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Topic :: Text Processing :: Markup :: Markdown",
-]
+# `uv sync` installs the root's dependencies, and a virtual workspace root installs no
+# packages of its own. Depending on both members is what puts the library, the CLI, and
+# the MCP server into the shared development environment.
 dependencies = [
-    "openstax-md @ git+https://github.com/michaelnavazhylau/openstax-md.git",
+    "openstax-llm",
+    "openstax-llm-mcp",
 ]
 
-[project.scripts]
-openstax-llm = "openstax_llm.cli:main"
+[tool.uv]
+package = false
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+[tool.uv.sources]
+openstax-llm = { workspace = true }
+openstax-llm-mcp = { workspace = true }
 
-[tool.hatch.metadata]
-allow-direct-references = true
+[tool.uv.workspace]
+members = ["packages/*"]
 
 [dependency-groups]
 dev = [
@@ -42,20 +38,32 @@ dev = [
     "pytest-cov>=5.0.0",
     "ruff>=0.9.0",
     "mypy>=1.14.0",
+    # Used by tests/test_skill_contract.py and tests/test_integration.py to validate
+    # exported records against the published chunk schema.
+    "jsonschema>=4.20.0",
+    # tomllib is stdlib only from 3.11, and the CI matrix still covers 3.10.
+    "tomli>=2.0.0; python_version < '3.11'",
 ]
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+src = ["packages/openstax-llm/src", "packages/openstax-llm-mcp/src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP"]
+
+[tool.ruff.lint.isort]
+# Without this, ruff treats the workspace packages as third-party and demands a blank
+# line between them and `mcp`/`pytest` imports.
+known-first-party = ["openstax_llm", "openstax_llm_mcp"]
 
 [tool.mypy]
 python_version = "3.10"
 strict = true
 warn_unused_configs = true
+files = ["packages/openstax-llm/src", "packages/openstax-llm-mcp/src"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["packages/openstax-llm/tests", "packages/openstax-llm-mcp/tests", "tests"]
 python_files = ["test_*.py"]

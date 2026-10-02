@@ -30,6 +30,11 @@ datasets/
 .scratch_build/
 _osbooks/
 
+# Installed agent skills (the source of truth is skills/ in the repository)
+.agents/
+.claude/
+.codex/
+
 # Local environment & Docker files
 .env
 .env.*

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,6 +29,8 @@ class TextBookDataset:
         *,
         chunker: DocumentChunker | None = None,
         math_delimiters: str = "dollar",
+        out_dir: Path | str | None = None,
+        quiet: bool = False,
     ) -> TextBookDataset:
         """Compile an OpenStax textbook (by catalog slug or path) and chunk it.
 
@@ -39,18 +42,27 @@ class TextBookDataset:
             Configured chunker instance.
         math_delimiters : str, default 'dollar'
             Math delimiter format ('dollar', 'bracket', 'none').
+        out_dir : Path | str, optional
+            Scratch directory the builder resolves relative media and module links
+            against. Nothing is written here unless media is requested; the default
+            keeps the historical ``.scratch_build`` location.
+        quiet : bool, default False
+            Suppress the upstream compiler's progress output. Set this whenever stdout
+            carries protocol data rather than a terminal, such as under an MCP stdio
+            transport.
         """
         c = chunker or DocumentChunker()
-        bundle = osm.Bundle.discover(source)
+        bundle = osm.Bundle.discover(source, quiet=quiet)
 
         col_slug = bundle.default_collection or (
             bundle.collections[0].slug if bundle.collections else bundle.root.name
         )
         col_title = bundle.book_titles.get(col_slug, col_slug)
 
+        scratch = Path(out_dir) if out_dir is not None else Path(".scratch_build")
         builder = osm.Builder(
             bundle,
-            out_dir=Path(".scratch_build"),
+            out_dir=scratch,
             options=osm.RenderOptions(math=math_delimiters, front_matter=False),
             layout="flat",
         )
@@ -81,6 +93,12 @@ class TextBookDataset:
                 book_title=col_title,
                 section=sec_num,
                 section_title=module.title,
+                # Several modules have no section number (prefaces, formula tables,
+                # chapter introductions). The module id is what keeps their chunk ids
+                # unique, and it is also the only way to tell six different
+                # 'Introduction' modules apart.
+                document_id=module.id,
+                metadata={"module_id": module.id},
             )
             all_chunks.extend(module_chunks)
 
@@ -94,6 +112,56 @@ class TextBookDataset:
                 "math_delimiters": math_delimiters,
             },
         )
+
+    @classmethod
+    def from_jsonl(cls, path: Path | str) -> TextBookDataset:
+        """Load a dataset previously written by :meth:`to_jsonl`.
+
+        Unknown fields are ignored so a dataset stamped with extra metadata by a
+        downstream tool still loads. Book identity comes from the first record.
+        """
+        known = {f.name for f in dataclasses.fields(PedagogicalChunk)}
+        chunks: list[PedagogicalChunk] = []
+
+        with open(Path(path), encoding="utf-8") as handle:
+            for number, line in enumerate(handle, 1):
+                if not line.strip():
+                    continue
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(f"{path}:{number} is not valid JSON: {exc}") from exc
+                chunks.append(PedagogicalChunk(**{k: v for k, v in record.items() if k in known}))
+
+        if not chunks:
+            raise ValueError(f"{path} contains no chunk records")
+
+        return cls(
+            book_slug=chunks[0].book_slug,
+            book_title=chunks[0].book_title,
+            chunks=chunks,
+            metadata={"source": str(path)},
+        )
+
+    def by_section(self) -> dict[str, list[PedagogicalChunk]]:
+        """Group chunks by section number, preserving encounter order."""
+        grouped: dict[str, list[PedagogicalChunk]] = {}
+        for chunk in self.chunks:
+            grouped.setdefault(chunk.section, []).append(chunk)
+        return grouped
+
+    def section_index(self) -> list[dict[str, Any]]:
+        """Summarize every section with its title and chunk count."""
+        return [
+            {
+                "section": section,
+                "section_title": defs[0].section_title,
+                "chapter": defs[0].chapter,
+                "chunks": len(defs),
+                "words": sum(c.word_count for c in defs),
+            }
+            for section, defs in self.by_section().items()
+        ]
 
     @property
     def total_words(self) -> int:

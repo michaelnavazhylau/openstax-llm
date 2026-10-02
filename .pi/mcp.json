@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "openstax-llm": {
+      "command": "uv",
+      "args": ["run", "--frozen", "openstax-llm-mcp"],
+      "description": "Chunk OpenStax textbooks into citation-aware, formula-safe RAG datasets"
+    }
+  }
+}

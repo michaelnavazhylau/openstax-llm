@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "openstax-llm": {
+      "source": ".",
+      "sourceType": "local",
+      "computedHash": "f7749758af57e21c2651d1b51067f05aa7a58201946029c61ce2cff0a9eb3f6e"
+    }
+  }
+}
