@@ -956,7 +956,7 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "openstax-md", git = "https://github.com/michaelnavazhylau/openstax-md.git" }]
+requires-dist = [{ name = "openstax-md", specifier = ">=0.2.0" }]
 
 [[package]]
 name = "openstax-llm-mcp"
@@ -1011,10 +1011,13 @@ dev = [
 [[package]]
 name = "openstax-md"
 version = "0.2.0"
-source = { git = "https://github.com/michaelnavazhylau/openstax-md.git#7067a23d70636900dd94b6fe6c63cafc66cb4de6" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "lxml" },
-    { name = "setuptools" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/72/99/1d63103fbe53c902c8e3124b646fa00e4f29d6a7f12d9ab4e330c29fe36e/openstax_md-0.2.0.tar.gz", hash = "sha256:705cc098dfa48991892118b499d06b552f6299d420dcdd8553e2c80a5c4ad8eb", size = 91383, upload-time = "2026-10-02T16:07:09.082Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/66/6a/f237ed5a8bdbd7635f64c87c3016006d6f4e0ccef5d6ef91c97fae3a7b11/openstax_md-0.2.0-py3-none-any.whl", hash = "sha256:869d94c6eb4414480dff0390fada4011a55da3a26b79016d365f8b003e30f67b", size = 55291, upload-time = "2026-10-02T16:07:07.707Z" },
 ]
 
 [[package]]
@@ -1580,15 +1583,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/78/fa/0f9c2020dc316c53d983be011720b8157cc052b97e3f4dfa7db6d0f880a6/ruff-0.16.10-py3-none-win32.whl", hash = "sha256:2a12e01cb9156c10c466f63b46eaae5ecea28dfbd21b5836353ae498e7d1349a", size = 10139176, upload-time = "2026-10-01T18:03:13.267Z" },
     { url = "https://files.pythonhosted.org/packages/99/29/cfb0df9448d4d4ad48c2de029ada9ebd71baa6da983a6c77ee6c6cd0fe82/ruff-0.16.10-py3-none-win_amd64.whl", hash = "sha256:97f2015c92aa97105b0eab19eb5d224884399281cfc5da86a92db4ab5e7fb2ca", size = 10584734, upload-time = "2026-10-01T18:03:16.006Z" },
     { url = "https://files.pythonhosted.org/packages/fc/05/c16957eb287c3fc062e032619a25868d93d408a844b725bcf514f7a378ff/ruff-0.16.10-py3-none-win_arm64.whl", hash = "sha256:25a65fe998c4e6861ec079ada5826a2fc605e6cbccbe9dcd7fac1f54e791621b", size = 10366440, upload-time = "2026-10-01T18:03:19.04Z" },
-]
-
-[[package]]
-name = "setuptools"
-version = "80.10.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/76/95/faf61eb8363f26aa7e1d762267a8d602a1b26d4f3a1e758e92cb3cb8b054/setuptools-80.10.2.tar.gz", hash = "sha256:8b0e9d10c784bf7d262c4e5ec5d4ec94127ce206e8738f29a437945fbc219b70", size = 1200343, upload-time = "2026-01-25T22:38:17.252Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/94/b8/f1f62a5e3c0ad2ff1d189590bfa4c46b4f3b6e49cef6f26c6ee4e575394d/setuptools-80.10.2-py3-none-any.whl", hash = "sha256:95b30ddfb717250edb492926c92b5221f7ef3fbcc2b07579bcd4a27da21d0173", size = 1064234, upload-time = "2026-01-25T22:38:15.216Z" },
 ]
 
 [[package]]

@@ -60,11 +60,9 @@ jobs:
 
       - name: Check wheel metadata for PyPI blockers
         id: metadata
-        # openstax-llm cannot be uploaded while it depends on openstax-md by git URL: PyPI
-        # rejects direct URL dependencies with a 400. This is expected to be red until
-        # openstax-md is itself on PyPI. The release still completes and still attaches
-        # the wheels; the publish jobs simply do not run.
-        continue-on-error: true
+        # A hard gate: PyPI rejects any distribution declaring a PEP 508 direct URL
+        # dependency, irrevocably, and `twine check` does not detect it. This used to be
+        # expected red while openstax-md was git-only; now it must pass.
         run: uv run python scripts/check_wheel_metadata.py dist/openstax-llm/*.whl dist/openstax-llm-mcp/*.whl
 
       - name: Upload distributions as workflow artifacts
@@ -82,14 +80,14 @@ jobs:
       - name: Report uploadability
         run: |
           if [ "${{ steps.metadata.outcome }}" = "success" ]; then
-            echo "Artifacts are PyPI-clean; publish jobs will run if enabled." >> "$GITHUB_STEP_SUMMARY"
+            echo "Artifacts are PyPI-clean; publish jobs run when PYPI_PUBLISH_ENABLED is true." >> "$GITHUB_STEP_SUMMARY"
           else
             {
-              echo "### Artifacts are not PyPI-uploadable yet"
+              echo "### Release stopped: artifacts are not PyPI-uploadable"
               echo
-              echo 'At least one wheel declares a PEP 508 direct URL dependency, which PyPI'
-              echo "rejects server-side. See \`docs/PUBLISHING.md\`. The GitHub Release still"
-              echo "has the wheels and sdists attached, so \`uvx --from <release asset>\` works."
+              echo 'A wheel declares a PEP 508 direct URL dependency, which PyPI rejects'
+              echo 'server-side. See `docs/PUBLISHING.md`. The wheels are attached to the'
+              echo 'GitHub Release, but nothing will be uploaded to PyPI.'
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -181,8 +179,8 @@ jobs:
           path: dist/
 
       - name: Publish openstax-llm to TestPyPI
-        # Any direct URL dependency would be rejected here too, which is the point of
-        # rehearsing: it surfaces the metadata problem before a real release.
+        # Rehearses the real upload. Any direct URL dependency or metadata problem fails
+        # here, while the version number is still disposable.
         continue-on-error: true
         uses: pypa/gh-action-pypi-publish@release/v1
         with:

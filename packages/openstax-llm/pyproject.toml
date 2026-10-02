@@ -24,7 +24,9 @@ classifiers = [
     "Topic :: Text Processing :: Markup :: Markdown",
 ]
 dependencies = [
-    "openstax-md @ git+https://github.com/michaelnavazhylau/openstax-md.git",
+    # Abstract range on purpose. A PEP 508 direct URL reference here would make this
+    # distribution permanently unpublishable to PyPI; see docs/PUBLISHING.md.
+    "openstax-md>=0.2.0",
 ]
 
 [project.urls]
@@ -44,6 +46,3 @@ build-backend = "hatchling.build"
 # Dockerfile resolve dependencies in a layer that copies only the manifests.
 [tool.hatch.build.targets.wheel]
 packages = ["src/openstax_llm"]
-
-[tool.hatch.metadata]
-allow-direct-references = true

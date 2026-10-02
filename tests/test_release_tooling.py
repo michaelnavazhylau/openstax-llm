@@ -82,7 +82,8 @@ def test_dirty_wheel_fails(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -
     assert "ERROR" in capsys.readouterr().out
 
 
-def test_allow_list_admits_a_known_blocker(tmp_path: Path) -> None:
+def test_allow_list_admits_an_explicitly_permitted_package(tmp_path: Path) -> None:
+    """`--allow` stays available for GitHub-release-only artifacts."""
     wheel = make_wheel(
         tmp_path / "dirty.whl", "openstax-llm", ["openstax-md @ git+https://example.com/md.git"]
     )
@@ -124,11 +125,6 @@ def test_real_built_wheels_are_classified_correctly() -> None:
 
     failing = {wheel for wheel in wheels if check.main([str(wheel)]) != 0}
     names = {check.requires_dist(wheel)[0] for wheel in failing}
-    # openstax-llm's git dependency on openstax-md is the one known, documented blocker.
-    assert names <= {"openstax-llm"}, (
-        f"unexpected PyPI blockers in built wheels: {names}. See docs/PUBLISHING.md"
-    )
-    assert names, (
-        "expected openstax-llm to still carry the openstax-md git URL; if it was removed, "
-        "drop --allow from .github/workflows/ci.yml and update tests/test_skill_contract.py"
-    )
+    # No member may carry a direct URL now that openstax-md is on PyPI. If this fails, the
+    # gate genuinely caught something: do not blanket-allow it here.
+    assert names == set(), f"PyPI blockers in built wheels: {names}. See docs/PUBLISHING.md"

@@ -39,9 +39,10 @@ When authoring or modifying code in this repository, you **MUST** adhere to the 
 - Changes with observable output must be verified against a **real textbook**, not only synthetic fixtures. Run `OPENSTAX_LLM_NETWORK_TESTS=1 uv run pytest tests/test_integration.py` for anything touching chunk boundaries, ids, or metadata. Three separate defects in this project were invisible to unit tests and obvious against a real book.
 
 ### Rule 5: PyPI Metadata Safety
-- **No workspace member other than `openstax-llm` may declare a PEP 508 direct URL dependency.** PyPI rejects such uploads server-side with a 400, and `twine check` does not detect it.
-- `scripts/check_wheel_metadata.py` enforces this in CI and in the release workflow. `tests/test_skill_contract.py` asserts the exact set of permitted direct dependencies, so adding one is a deliberate, reviewed change.
-- `packages/openstax-llm`'s `openstax-md` git dependency is the single known blocker. See `docs/PUBLISHING.md`.
+- **No workspace member may declare a PEP 508 direct URL dependency.** PyPI rejects such uploads server-side with a 400, irrevocably, and `twine check` does not detect it.
+- `scripts/check_wheel_metadata.py` enforces this in CI, in the release workflow, and against the real `dist/` artifacts in `tests/test_release_tooling.py`. `tests/test_skill_contract.py` asserts the direct-dependency set is empty and that `tool.hatch.metadata.allow-direct-references` has not been reintroduced.
+- If a dependency is only available from git, publish it to PyPI rather than reaching for a URL. `openstax-md` was on a git URL until it was released, which blocked both packages from PyPI entirely; see `docs/PUBLISHING.md`.
+- **Never read, print, copy, or commit `pypi-creds.env`.** It is gitignored and listed in `.dockerignore` (which is independent of `.gitignore`, so a secret gitignored only there would still be uploaded to a remote Docker builder). CI publishes through Trusted Publishing and never needs it. If you need a secret value, tell the user the variable name instead of asking for the value.
 
 ### Rule 6: Schema and Skill Synchronisation
 - `skills/openstax-llm/assets/chunk.schema.json` is the published contract for exported records. It must stay in exact agreement with `PedagogicalChunk.to_dict()`.

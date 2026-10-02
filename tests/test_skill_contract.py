@@ -220,27 +220,38 @@ def test_mcp_package_pins_the_core_version_range() -> None:
 
 
 def test_mcp_distribution_has_no_direct_url_dependency() -> None:
-    """PyPI rejects uploads whose Requires-Dist holds a direct URL.
-
-    This distribution must stay publishable, so an abstract range is required here. The
-    known exception is the core package's `openstax-md` git dependency, which is tracked in
-    the publishing notes rather than silently reintroduced.
-    """
+    """The MCP distribution must stay publishable, and it is the stricter of the two."""
     dependencies = load_toml(MCP_PYPROJECT)["project"]["dependencies"]
     offenders = [dep for dep in dependencies if DIRECT_REFERENCE.search(dep)]
     assert offenders == []
 
 
-def test_core_direct_dependency_is_the_known_pypi_blocker() -> None:
-    """Guards the exception above: adding a *second* direct URL is a new blocker."""
-    dependencies = load_toml(CORE_PYPROJECT)["project"]["dependencies"]
-    offenders = [dep for dep in dependencies if DIRECT_REFERENCE.search(dep)]
-    assert offenders == [
-        "openstax-md @ git+https://github.com/michaelnavazhylau/openstax-md.git"
-    ], (
-        "core's direct URL dependency set changed; PyPI publishing is blocked until "
-        "openstax-md is itself on PyPI, so this must be a deliberate change"
-    )
+def test_no_distribution_declares_a_direct_url_dependency() -> None:
+    """Every member must stay publishable to PyPI.
+
+    PyPI rejects any distribution whose Requires-Dist holds a PEP 508 direct URL, server-side
+    and without recourse. This used to assert a known exception (openstax-llm's
+    `openstax-md @ git+...`); now that openstax-md is on PyPI the allowed set is empty, so a
+    reintroduced direct reference fails here rather than at upload time.
+    """
+    for path in (CORE_PYPROJECT, MCP_PYPROJECT):
+        dependencies = load_toml(path)["project"]["dependencies"]
+        offenders = [dep for dep in dependencies if DIRECT_REFERENCE.search(dep)]
+        assert offenders == [], (
+            f"{path.name} declares direct URL dependencies {offenders}. PyPI would reject "
+            "the upload; depend on a published version instead. See docs/PUBLISHING.md."
+        )
+
+
+def test_hatch_direct_references_permission_is_gone() -> None:
+    """`allow-direct-references` existed only to permit the openstax-md git URL.
+
+    Leaving it on would let a direct reference slip back in while the metadata gate stayed
+    green locally, because hatchling would no longer complain.
+    """
+    for path in (CORE_PYPROJECT, MCP_PYPROJECT):
+        metadata = load_toml(path).get("tool", {}).get("hatch", {}).get("metadata", {})
+        assert "allow-direct-references" not in metadata, f"{path.name} still permits them"
 
 
 def test_uv_sources_are_workspace_local() -> None:

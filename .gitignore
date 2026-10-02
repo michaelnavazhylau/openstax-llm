@@ -41,6 +41,15 @@ datasets/
 *.jsonl
 .scratch_build/
 
+# Secrets
+# Local publishing credentials. See docs/PUBLISHING.md. CI uses PyPI Trusted
+# Publishing (OIDC) and needs no token, so this file is for local/manual uploads only.
+pypi-creds.env
+*.env
+.env
+.env.*
+!*.env.example
+
 # Installed skills
 # `npx skills add` copies the canonical skills/ folder into the agents' directories and
 # symlinks the rest, so every one of these is a build artifact. skills/ is the source of

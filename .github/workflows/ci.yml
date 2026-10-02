@@ -65,11 +65,8 @@ jobs:
       - name: Check wheel metadata for PyPI blockers
         # PyPI rejects direct URL dependencies server-side with a 400, and `twine check`
         # does not catch it. Failing here is much cheaper than failing after a tag.
-        # openstax-llm is allowed to carry its openstax-md git dependency for now; the
-        # MCP distribution must stay completely clean. See docs/PUBLISHING.md.
         run: >-
           uv run python scripts/check_wheel_metadata.py
-          --allow openstax-llm
           dist/openstax-llm/*.whl dist/openstax-llm-mcp/*.whl
 
       - name: Upload distributions

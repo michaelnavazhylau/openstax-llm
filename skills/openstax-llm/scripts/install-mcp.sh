@@ -68,9 +68,10 @@ print(json.dumps(
 
 register_pi() {
     echo "Registering with Pi (scope: ${SCOPE})"
-    # Install the server command itself so `uvx` does not re-resolve on every launch.
+    # `uvx` fetches and caches the server on first use.
     if ! uvx openstax-llm-mcp --version >/dev/null 2>&1; then
-        echo "  openstax-llm-mcp not on PyPI yet; server will be launched from git each time."
+        echo "  Note: 'uvx openstax-llm-mcp' did not resolve just now. If the release is not"
+        echo "  on PyPI yet, register the git form printed by 'install-mcp.sh --agent print'."
     fi
     local scope_flag=()
     [[ "${SCOPE}" == "project" ]] && scope_flag=(-l)

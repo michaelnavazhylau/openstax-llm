@@ -46,15 +46,22 @@ academic textbooks:
 
 ## 🚀 Installation
 
-`openstax-llm` is not on PyPI yet: it depends on `openstax-md` by Git URL, which PyPI
-rejects. See [docs/PUBLISHING.md](docs/PUBLISHING.md). Install from git in the meantime.
-
 ```bash
 # Library + CLI
-uv add "git+https://github.com/michaelnavazhylau/openstax-llm.git#subdirectory=packages/openstax-llm"
+uv add openstax-llm
 
 # CLI as a standalone tool
-uv tool install "git+https://github.com/michaelnavazhylau/openstax-llm.git#subdirectory=packages/openstax-llm"
+uv tool install openstax-llm
+
+# MCP server, one-shot via uvx
+uvx openstax-llm-mcp
+```
+
+Until the first release is published to PyPI, install from git instead:
+
+```bash
+uv add "git+https://github.com/michaelnavazhylau/openstax-llm.git#subdirectory=packages/openstax-llm"
+uvx --from "git+https://github.com/michaelnavazhylau/openstax-llm.git#subdirectory=packages/openstax-llm-mcp" openstax-llm-mcp
 ```
 
 Or run the container:
@@ -122,7 +129,7 @@ Exposes the same three operations to any MCP client over stdio or streamable HTT
 
 ```bash
 # Register with Pi
-pi mcp add openstax-llm -- uvx --from "git+https://github.com/michaelnavazhylau/openstax-llm.git#subdirectory=packages/openstax-llm-mcp" openstax-llm-mcp
+pi mcp add openstax-llm -- uvx openstax-llm-mcp
 
 # Or serve over HTTP
 docker run --rm -p 8765:8765 openstax-llm-mcp

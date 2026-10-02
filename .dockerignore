@@ -35,8 +35,13 @@ _osbooks/
 .claude/
 .codex/
 
-# Local environment & Docker files
+# Local environment, secrets & Docker files
+# .dockerignore is independent of .gitignore: a secret that is gitignored would otherwise
+# still be sent to the builder (and off-machine with a remote driver).
+env
+*.env
 .env
 .env.*
+!*.env.example
 Dockerfile*
 .dockerignore

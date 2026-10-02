@@ -55,10 +55,10 @@ installed_version() {
 install_cli() {
     echo "openstax-llm not found. Installing." >&2
     if command -v uv >/dev/null 2>&1; then
-        # Requires the package to be on PyPI. Until it is, this falls through to git.
         if uv tool install openstax-llm >/dev/null 2>&1; then
             return 0
         fi
+        # Fallback for when the release is not on PyPI yet, or the index is unreachable.
         # uv resolves a workspace member through the `subdirectory` fragment: the
         # repository root is a virtual workspace, not a package.
         uv tool install \
