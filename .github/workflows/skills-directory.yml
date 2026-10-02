@@ -1,0 +1,32 @@
+name: Skills directory
+
+# skills.sh has no publish API. A skill is installable as soon as this repository is
+# public, but it is *listed* — with an install count, a detail page, and a security audit —
+# only after skills.sh aggregates anonymous install telemetry from
+# `npx skills add <owner>/<repo>`. That aggregation happens outside this repository and
+# lags the first install, so this job is deliberately warn-only: an unlisted skill is a
+# state CI cannot fix, and painting main red for it would train everyone to ignore the
+# check. It fails only when the directory cannot be read at all.
+#
+# Once the badge at https://skills.sh/b/michaelnavazhylau/openstax-llm renders an install
+# count, add `--require-listed` below to turn silent listing drift into a failure.
+on:
+  schedule:
+    # Nightly, offset from the hour so we are not competing with every other cron job.
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  listed:
+    name: Listed on skills.sh
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check the skills.sh directory
+        # Stdlib only, so a nightly poll does not need `uv sync` first.
+        run: python3 scripts/check_skills_directory.py

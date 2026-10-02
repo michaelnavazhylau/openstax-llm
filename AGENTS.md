@@ -49,6 +49,12 @@ When authoring or modifying code in this repository, you **MUST** adhere to the 
 - The skill and the library are versioned independently once installed (the skill is copied and hashed by the `skills` CLI), so they can drift. `tests/test_skill_contract.py` is the drift detector; it fails on schema, version, reference, or packaging disagreements.
 - Never reimplement the delimiter-integrity check outside `openstax_llm/validate.py`. A naive `text.count("$") % 2` reports escaped currency such as `\$962.50` as a split formula.
 
+### Rule 7: Skill Distribution and skills.sh Listing
+- **There is no publish or submission API for the skills.sh directory.** The skill is installable the moment the repository is public and the CLI can discover `skills/openstax-llm/SKILL.md`; it is *listed* (install count, detail page, security audit) only after skills.sh aggregates anonymous install telemetry from `npx skills add michaelnavazhylau/openstax-llm`. Pushing cannot force a listing.
+- `scripts/check_skills_directory.py` is the only sanctioned way to ask whether the skill is listed. It reads the public search endpoint the website itself uses; the documented `/api/v1/` endpoints require a Vercel OIDC token and must not be wired into CI.
+- Never claim a listing that does not exist. `README.md`'s badge and prose stay truthful until `https://skills.sh/b/michaelnavazhylau/openstax-llm` renders an install count instead of `resource not found`.
+- `.github/workflows/skills-directory.yml` is warn-only on purpose. Add `--require-listed` only once the badge renders; a nightly job that is red for a state CI cannot fix gets ignored.
+
 ---
 
 ## 3. Architecture & Code Layout
@@ -69,9 +75,11 @@ openstax-llm/
 ├── .github/workflows/
 │   ├── ci.yml                  # 3.10-3.14 matrix, lint, types, tests, build, two image jobs
 │   ├── skills.yml              # Skill contract + `npx skills add . --list` discoverability
+│   ├── skills-directory.yml    # Nightly skills.sh listing probe (warn-only, scheduled)
 │   └── release.yml             # Tag => build => gate => GitHub Release => PyPI
 ├── scripts/
 │   ├── check_wheel_metadata.py # Release gate: fails on direct URL dependencies
+│   ├── check_skills_directory.py # Is the skill listed on skills.sh? (public API, no auth)
 │   └── publish_local.sh        # Token-based publish; dry-runs unless --execute
 ├── packages/
 │   ├── openstax-llm/           # Dist "openstax-llm": library + CLI
@@ -114,6 +122,7 @@ openstax-llm/
 └── tests/                      # Repo-level tests spanning both packages
     ├── test_skill_contract.py  # Schema/version/reference/packaging agreement
     ├── test_release_tooling.py # Release gate behaviour
+    ├── test_skills_directory.py # skills.sh listing probe behaviour
     └── test_integration.py     # Real textbook; gated on OPENSTAX_LLM_NETWORK_TESTS=1
 ```
 
@@ -162,6 +171,13 @@ gh workflow run release.yml -f target=testpypi
 
 # Verify the skill is discoverable exactly as a consumer would install it
 npx --yes skills add . --list
+
+# Is the skill listed on skills.sh? Public endpoint, no auth. Warn-only by default;
+# --require-listed turns a missing entry into exit 1. Listing is aggregated from install
+# telemetry, so it lags `npx skills add michaelnavazhylau/openstax-llm`.
+python3 scripts/check_skills_directory.py
+python3 scripts/check_skills_directory.py --json
+OPENSTAX_LLM_NETWORK_TESTS=1 uv run pytest tests/test_skills_directory.py -v
 
 # Build the MCP server image and smoke-test it
 docker build -t openstax-llm-mcp .
