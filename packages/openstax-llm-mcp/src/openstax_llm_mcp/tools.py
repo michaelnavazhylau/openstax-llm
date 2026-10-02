@@ -147,8 +147,12 @@ def register_tools(
             overlap: Words of overlap carried between adjacent chunks.
         """
         with anticipated_failures():
-            dataset = store.get(target, chunker=build_chunker(target_words, max_words, overlap))
+            # Validate arguments and the destination *before* compiling. Reversing this costs
+            # a full clone-and-render of the textbook before rejecting a bad path, which is
+            # minutes of work for an error that needs no data at all.
+            chunker = build_chunker(target_words, max_words, overlap)
             destination = resolve_output_path(out, output_root)
+            dataset = store.get(target, chunker=chunker)
             dataset.to_jsonl(destination)
         return {
             "path": str(destination),

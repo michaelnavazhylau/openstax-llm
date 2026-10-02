@@ -52,7 +52,6 @@ Take the `slug` from the result. Slugs follow `<name>-<edition>e` conventions an
 case-sensitive lowercase.
 
 ### 2. Inspect before you export
-
 Compilation is the expensive step, so look before you leap.
 
 ```
@@ -60,30 +59,42 @@ inspect_textbook("college-physics-2e")       # MCP: totals + per-section index
 openstax-llm info college-physics-2e         # CLI
 ```
 
-This returns `total_chunks`, `total_words`, `total_tokens_est`, a `chunk_types`
-breakdown, and a `sections` index. Use `sections` to confirm the book covers what the user
-asked for before spending time on a full export, and to check whether chunk counts are
-sane for the intended context window.
+Use `sections` to confirm the book covers what the user asked for before spending time on a
+full export. On a large book the section index is itself truncated, so do not treat it as
+complete: `college-physics-2e` returns ~9,800 tokens of summary whose `sections` array is cut.
+
+Tune chunk sizes only when the defaults are wrong. The defaults (`target_words=400`,
+`max_words=600`, `overlap=50`) suit most embedding models.
+
+- Raising `max_words` past ~800 starts hurting retrieval precision; prefer more chunks. The
+  ceiling is enforced by splitting long paragraphs at sentence boundaries that sit outside
+  math, so lowering it is safe.
+- Increase `overlap` (100–150) only for prose-dense narrative books. Overlap is dropped when
+  carrying it would push a chunk past `max_words`; the ceiling wins over overlap.
+- Shorten for small-context models by lowering `target_words`; `max_words` must stay greater
+  than or equal to `target_words`.
+- **Do not sweep the configuration to compare settings.** The cache is keyed by target *and*
+  chunker config, so each distinct combination recompiles the book. A model asked to explore
+  produced six full compiles of a 990,000-word book in one turn.
 
 ### 3. Export a dataset
 
-```
-prepare_textbook("college-physics-2e", "datasets/college-physics-2e.jsonl")
+```bash
 openstax-llm prepare college-physics-2e -o datasets/college-physics-2e.jsonl
 ```
 
-Tune only when the defaults are wrong. The defaults (`target_words=400`, `max_words=600`,
-`overlap=50`) suit most embedding models.
+### 4. Read content from the export, not from section resources
 
-- Raising `max_words` past ~800 starts hurting retrieval precision; prefer more chunks.
-  The ceiling is enforced by splitting long paragraphs at sentence boundaries that sit
-  outside math, so lowering it is safe.
-- Increase `overlap` (100–150) only for prose-dense narrative books. Overlap is dropped
-  when carrying it would push a chunk past `max_words`; the ceiling wins over overlap.
-- Shorten for small-context models by lowering `target_words`; `max_words` must stay
-  greater than or equal to `target_words`.
+If you have filesystem tools, read the exported JSONL and filter by `section`. **Do not loop
+over `textbook://<slug>/<section>` reads to gather content.** Every section of a real
+bookproduces a payload over 20 KB, so clients truncate it — you will see the start and end of
+a section and silently miss the middle. See [`references/mcp-tools.md`](references/mcp-tools.md)
+for the measurements and the per-situation guidance.
 
-### 4. Verify before handing anything downstream
+Section resources are still useful for a targeted lookup on a small section when you have no
+filesystem access. Just treat the result as partial rather than complete.
+
+### 5. Verify before handing anything downstream
 
 Treat the export as unverified until you check it:
 

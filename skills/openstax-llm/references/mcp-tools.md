@@ -103,8 +103,30 @@ context rather than a file on disk.
 LaTeX. An unknown section raises `ResourceNotFoundError` listing the available sections —
 read that message rather than guessing again.
 
-Section reads are the cheapest way to answer a content question. Prefer them over a
-full-book export.
+### Section reads are size-limited in practice
+
+**A real section does not fit in one resource read.** Measured on `calculus-volume-1`, every
+one of its 46 sections produces a payload over 20 KB — the smallest is 25 KB, the largest
+100 KB (section 1.2: 47 chunks, 13,384 words). Clients that truncate large tool results (Pi
+removes the *middle* of anything over 20 KB) therefore deliver only a fraction of the
+section: section 1.1 gave the model about 21% of its 54 chunks, silently.
+
+The failure mode is nasty because it is invisible. The read succeeds, the beginning and end
+look correct, and an answer drawn from them sounds confident while most of the section was
+never seen.
+
+Practical guidance:
+
+| Situation | Do this |
+|---|---|
+| You need one specific section and have filesystem tools | `prepare_textbook`, then read the JSONL and filter by `section`. |
+| You have no filesystem access | A section read still works, but treat the result as partial. Read `textbook://<slug>` first to see `chunks` and `words` per section, and prefer sections with few chunks. |
+| You need the whole book's content | Always export. Never read section resources in a loop. |
+| You only need counts, titles, or coverage | `inspect_textbook` — but note it is also large on big books (see below), since the `sections` index grows with the book. |
+
+`inspect_textbook` is not exempt either: `college-physics-2e` (3,429 chunks, ~150 sections)
+returns a ~9,800-token summary whose `sections` array is truncated. On large books, treat the
+section index as incomplete.
 
 ## Options
 

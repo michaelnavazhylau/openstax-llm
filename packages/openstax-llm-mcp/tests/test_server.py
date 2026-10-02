@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from pathlib import Path
 
 import pytest
@@ -134,3 +135,71 @@ def test_store_clear_forces_recompilation(counting_compiler: list[dict]) -> None
     store.clear()
     store.get("book-a")
     assert len(counting_compiler) == 2
+
+
+def test_concurrent_calls_for_the_same_target_compile_once(counting_compiler: list[dict]) -> None:
+    """Regression: concurrent compiles of one target raced on the shared git clone.
+
+    The compiler clones the textbook repository into a shared cache directory. Two
+    concurrent clones of the same repository into the same path make git exit 128, which
+    surfaced as an opaque "Error executing tool inspect_textbook" with no detail. Models
+    emit parallel tool calls routinely, so this reproduced in normal use.
+    """
+    store = TextbookStore(max_entries=4)
+    barrier = threading.Barrier(8)
+    results: list[object] = []
+    errors: list[BaseException] = []
+
+    def worker() -> None:
+        barrier.wait()  # maximise overlap so the race is actually exercised
+        try:
+            results.append(store.get("book-a"))
+        except BaseException as exc:  # noqa: BLE001 - recorded and re-raised on the main thread
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == [], f"{len(errors)} concurrent calls failed: {errors[:2]}"
+    assert len(results) == 8
+    assert all(result is results[0] for result in results), "callers got different datasets"
+    assert len(counting_compiler) == 1, "the target was compiled more than once"
+
+
+def test_concurrent_calls_for_different_targets_do_not_serialise(monkeypatch) -> None:
+    """The per-target lock must not collapse into one global lock.
+
+    A single global lock would fix the clone race but serialise every unrelated book, so
+    this pins the behaviour that motivated keying the lock by target.
+    """
+    release_a = threading.Event()
+    a_started = threading.Event()
+    b_done = threading.Event()
+
+    def fake_from_textbook(cls, source, **kwargs):  # noqa: ANN001, ANN003
+        if str(source) == "book-a":
+            a_started.set()
+            release_a.wait(timeout=5)
+        else:
+            b_done.set()
+        return make_dataset()
+
+    monkeypatch.setattr(TextBookDataset, "from_textbook", classmethod(fake_from_textbook))
+    store = TextbookStore(max_entries=4)
+
+    first = threading.Thread(target=lambda: store.get("book-a"))
+    first.start()
+    assert a_started.wait(timeout=5), "book-a never began compiling"
+
+    second = threading.Thread(target=lambda: store.get("book-b"))
+    second.start()
+    # book-b must complete while book-a is still held inside its compile.
+    assert b_done.wait(timeout=5), "book-b was blocked behind book-a's in-flight compile"
+
+    release_a.set()
+    first.join(timeout=5)
+    second.join(timeout=5)
+    assert not first.is_alive() and not second.is_alive()
