@@ -5,6 +5,7 @@
 [![PyPI - MCP](https://img.shields.io/pypi/v/openstax-llm-mcp?label=openstax-llm-mcp)](https://pypi.org/project/openstax-llm-mcp/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Powered by openstax-md](https://img.shields.io/badge/compiler-openstax--md-purple)](https://github.com/michaelnavazhylau/openstax-md)
+[![skills.sh](https://skills.sh/b/michaelnavazhylau/openstax-llm)](https://skills.sh/michaelnavazhylau/openstax-llm)
 
 **Pedagogical semantic chunking, RAG dataset preparation, and LLM fine-tuning pipelines from OpenStax textbooks.**
 
@@ -154,6 +155,10 @@ for options, tool schemas, and failure modes.
 ```bash
 npx skills add michaelnavazhylau/openstax-llm
 ```
+
+Also on [skills.sh](https://skills.sh/michaelnavazhylau/openstax-llm) — that directory is populated
+from anonymous install telemetry, so the listing appears only after the first
+`npx skills add` (the command above is always the canonical path).
 
 The skill teaches an agent *when* and *how* to reach for these tools: resolving slugs
 instead of guessing titles, verifying exports before indexing, tuning chunk sizes, and
