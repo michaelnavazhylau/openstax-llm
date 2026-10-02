@@ -46,6 +46,9 @@ datasets/
 # symlinks the rest, so every one of these is a build artifact. skills/ is the source of
 # truth and IS committed. `skills-lock.json` is deliberately NOT committed: it is a lock for
 # a project that *consumes* skills, and this repository publishes rather than consumes any.
+# Committing it here would be circular (source ".") and would invalidate on every edit to
+# skills/, making `skills check` report a permanent phantom update against itself.
+skills-lock.json
 .agents/skills/
 .claude/skills/
 .codex/skills/
