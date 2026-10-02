@@ -71,7 +71,8 @@ openstax-llm/
 │   ├── skills.yml              # Skill contract + `npx skills add . --list` discoverability
 │   └── release.yml             # Tag => build => gate => GitHub Release => PyPI
 ├── scripts/
-│   └── check_wheel_metadata.py # Release gate: fails on direct URL dependencies
+│   ├── check_wheel_metadata.py # Release gate: fails on direct URL dependencies
+│   └── publish_local.sh        # Token-based publish; dry-runs unless --execute
 ├── packages/
 │   ├── openstax-llm/           # Dist "openstax-llm": library + CLI
 │   │   ├── pyproject.toml
@@ -150,7 +151,14 @@ uv build --package openstax-llm --out-dir dist/openstax-llm
 uv build --all-packages
 
 # Release gate: fail on PEP 508 direct URL dependencies
-python scripts/check_wheel_metadata.py --allow openstax-llm dist/*/*.whl
+uv run python scripts/check_wheel_metadata.py dist/*/*.whl
+
+# Publish with a token from pypi-creds.env. Dry run by default; --execute uploads.
+scripts/publish_local.sh --target testpypi
+scripts/publish_local.sh --execute
+
+# Rehearse the full release workflow on TestPyPI (needs pending publishers)
+gh workflow run release.yml -f target=testpypi
 
 # Verify the skill is discoverable exactly as a consumer would install it
 npx --yes skills add . --list
