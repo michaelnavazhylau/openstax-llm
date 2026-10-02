@@ -52,14 +52,21 @@ jobs:
       - name: List skills in this repository
         # This is the exact command a consumer runs to install. If discovery breaks, the
         # skill stops being installable no matter how good its contents are.
+        env:
+          # The CLI colors its output under CI, which breaks plain greps: it emits
+          # "Found \e[32m1\e[39m skill". NO_COLOR is the cross-tool convention; the sed
+          # strip below is the belt to that pair of braces.
+          NO_COLOR: "1"
         run: |
-          output=$(npx --yes skills add . --list 2>&1)
-          echo "$output"
-          echo "$output" | grep -q "openstax-llm" || {
+          output=$(npx --yes skills add . --list 2>&1 || true)
+          clean=$(printf '%s' "$output" | sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g')
+          echo "$clean"
+
+          echo "$clean" | grep -q "openstax-llm" || {
             echo "::error::the skills CLI did not discover the openstax-llm skill"
             exit 1
           }
-          echo "$output" | grep -q "Found 1 skill" || {
+          echo "$clean" | grep -qE "Found +1 +skill" || {
             echo "::error::expected exactly one skill in this repository"
             exit 1
           }
