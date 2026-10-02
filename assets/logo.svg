@@ -1,0 +1,194 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 220" width="100%" height="220" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <!-- Background Gradients -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0e17"/>
+      <stop offset="50%" stop-color="#111827"/>
+      <stop offset="100%" stop-color="#0b1120"/>
+    </linearGradient>
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.6"/>
+      <stop offset="35%" stop-color="#3b82f6" stop-opacity="0.8"/>
+      <stop offset="70%" stop-color="#06b6d4" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#10b981" stop-opacity="0.4"/>
+    </linearGradient>
+
+    <!-- Ambient Glows -->
+    <radialGradient id="glowViolet" cx="20%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#a855f7" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowCyan" cx="70%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Emblem Gradients: source page, chunk cards, embeddings -->
+    <linearGradient id="pageGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c4b5fd"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="chunkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#67e8f9"/>
+      <stop offset="100%" stop-color="#0ea5e9"/>
+    </linearGradient>
+    <linearGradient id="embedGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6ee7b7"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    <linearGradient id="arrowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="50%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+    <linearGradient id="titleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="60%" stop-color="#f1f5f9"/>
+      <stop offset="100%" stop-color="#c4b5fd"/>
+    </linearGradient>
+    <linearGradient id="tagBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0.9"/>
+    </linearGradient>
+
+    <!-- Depth: no SVG filters, so the emblem survives rasterising renderers
+         (librsvg and friends drop filtered groups entirely). -->
+  </defs>
+
+  <style>
+    .font-brand { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-weight: 800; }
+    .font-mono { font-family: "SF Mono", "Fira Code", "Roboto Mono", Menlo, Monaco, Consolas, monospace; }
+    .font-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  </style>
+
+  <!-- Card Background -->
+  <rect x="2" y="2" width="876" height="216" rx="20" fill="url(#bgGrad)"/>
+  <rect x="2" y="2" width="876" height="216" rx="20" fill="url(#glowViolet)"/>
+  <rect x="2" y="2" width="876" height="216" rx="20" fill="url(#glowCyan)"/>
+  <rect x="2" y="2" width="876" height="216" rx="20" fill="none" stroke="url(#borderGrad)" stroke-width="1.5" stroke-opacity="0.75"/>
+
+  <!-- Top Accent Highlight -->
+  <path d="M 30 2 L 850 2" stroke="url(#borderGrad)" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- ==================== LEFT EMBLEM ==================== -->
+  <g transform="translate(42, 28)">
+    <!-- Outer Emblem Frame (manual drop shadow) -->
+    <rect x="0" y="4" width="164" height="164" rx="28" fill="#000000" opacity="0.35"/>
+    <rect x="0" y="0" width="164" height="164" rx="28" fill="#0f172a" stroke="#1e293b" stroke-width="1.5"/>
+    <rect x="0" y="0" width="164" height="164" rx="28" fill="url(#glowViolet)" opacity="0.3"/>
+
+    <!-- Textbook module: numbered section, display math, worked example + solution -->
+    <g transform="translate(16, 26)">
+      <path d="M 0 10 C 0 4, 4 0, 10 0 L 42 0 C 48 0, 52 4, 52 10 L 52 102 C 52 108, 48 112, 42 112 L 10 112 C 4 112, 0 108, 0 102 Z"
+            fill="url(#pageGrad)" opacity="0.16" stroke="#a78bfa" stroke-width="1.5" stroke-opacity="0.85"/>
+
+      <!-- Folded corner -->
+      <path d="M 36 0 L 52 16 L 36 16 Z" fill="#7c3aed" opacity="0.6"/>
+
+      <!-- Display math that must never be split across a chunk boundary.
+           Kept clear of the chunking chevron that overlaps the page's right edge. -->
+      <text x="9" y="36" fill="#a78bfa" class="font-brand" font-size="18" font-style="italic">∫</text>
+      <text x="20" y="34" fill="#ddd6fe" class="font-mono" font-size="8">f(x)dx</text>
+
+      <!-- Section number: 1.2 -->
+      <text x="9" y="60" fill="#c4b5fd" class="font-mono" font-size="9" font-weight="600">§1.2</text>
+      <rect x="9" y="66" width="26" height="3" rx="1.5" fill="#ddd6fe" opacity="0.55"/>
+
+      <!-- Worked example: prose, then the solution that must stay in its chunk -->
+      <text x="9" y="90" fill="#c4b5fd" class="font-mono" font-size="8">Example</text>
+      <rect x="9" y="94" width="30" height="3" rx="1.5" fill="#a78bfa" opacity="0.45"/>
+      <text x="9" y="108" fill="#6ee7b7" class="font-mono" font-size="8">Solution</text>
+    </g>
+
+    <!-- Transformation Flow: Chunking Chevron (Center) -->
+    <g transform="translate(62, 66)">
+      <circle cx="10" cy="12" r="13" fill="#1e293b" stroke="url(#arrowGrad)" stroke-width="1.5"/>
+      <path d="M 7 6 L 13 12 L 7 18" fill="none" stroke="#22d3ee" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.22"/>
+      <path d="M 7 6 L 13 12 L 7 18" fill="none" stroke="#22d3ee" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- Pedagogical Chunks (chunk_type enum) -->
+    <g transform="translate(88, 24)">
+      <g>
+        <rect x="0" y="0" width="64" height="20" rx="5" fill="#1e293b" stroke="#22d3ee" stroke-width="1" stroke-opacity="0.45"/>
+        <rect x="0" y="4" width="2.5" height="12" rx="1.25" fill="#22d3ee"/>
+        <text x="9" y="14" fill="#a5f3fc" class="font-mono" font-size="8.5">prose</text>
+      </g>
+      <g transform="translate(0, 26)">
+        <rect x="0" y="0" width="64" height="20" rx="5" fill="#1e293b" stroke="#a78bfa" stroke-width="1" stroke-opacity="0.45"/>
+        <rect x="0" y="4" width="2.5" height="12" rx="1.25" fill="#a78bfa"/>
+        <text x="9" y="14" fill="#ddd6fe" class="font-mono" font-size="8.5">example</text>
+      </g>
+      <g transform="translate(0, 52)">
+        <rect x="0" y="0" width="64" height="20" rx="5" fill="#1e293b" stroke="#34d399" stroke-width="1" stroke-opacity="0.45"/>
+        <rect x="0" y="4" width="2.5" height="12" rx="1.25" fill="#34d399"/>
+        <text x="9" y="14" fill="#a7f3d0" class="font-mono" font-size="8.5">summary</text>
+      </g>
+
+      <!-- Chunks resolve into an embedding vector (RAG / fine-tuning) -->
+      <g transform="translate(0, 88)" fill="url(#embedGrad)">
+        <circle cx="3" cy="0" r="2.2" opacity="0.9"/>
+        <circle cx="14" cy="0" r="2.2" opacity="0.55"/>
+        <circle cx="25" cy="0" r="2.2" opacity="0.85"/>
+        <circle cx="36" cy="0" r="2.2" opacity="0.45"/>
+        <circle cx="47" cy="0" r="2.2" opacity="0.8"/>
+        <circle cx="58" cy="0" r="2.2" opacity="0.5"/>
+        <circle cx="3" cy="9" r="2.2" opacity="0.5"/>
+        <circle cx="14" cy="9" r="2.2" opacity="0.85"/>
+        <circle cx="25" cy="9" r="2.2" opacity="0.45"/>
+        <circle cx="36" cy="9" r="2.2" opacity="0.9"/>
+        <circle cx="47" cy="9" r="2.2" opacity="0.55"/>
+        <circle cx="58" cy="9" r="2.2" opacity="0.75"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- ==================== BRANDING & TYPOGRAPHY ==================== -->
+  <g transform="translate(236, 42)">
+    <!-- Primary Title & Capability Chips -->
+    <g transform="translate(0, 36)">
+      <text x="0" y="0" fill="url(#titleGrad)" class="font-brand" font-size="44" letter-spacing="-1">openstax-llm</text>
+
+      <!-- Zero-install runner sub-badge -->
+      <rect x="306" y="-30" width="96" height="26" rx="13" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+      <circle cx="318" cy="-17" r="4" fill="#10b981"/>
+      <text x="328" y="-13" fill="#6ee7b7" class="font-mono" font-size="11.5" font-weight="600">uvx ready</text>
+
+      <!-- Version Chip -->
+      <rect x="414" y="-30" width="68" height="26" rx="13" fill="url(#tagBgGrad)" stroke="#a855f7" stroke-width="1" stroke-opacity="0.6"/>
+      <text x="448" y="-13" fill="#c4b5fd" class="font-mono" font-size="12" font-weight="700" text-anchor="middle">v0.1.0</text>
+    </g>
+
+    <!-- Subtitle / Mission Statement -->
+    <text x="0" y="66" fill="#94a3b8" class="font-body" font-size="16" font-weight="400" letter-spacing="-0.2">
+      Pedagogical Chunking and RAG / Fine-Tuning Datasets from OpenStax Textbooks
+    </text>
+
+    <!-- Feature Pill Badges -->
+    <g transform="translate(0, 94)">
+      <!-- Chip 1: formula-safe splitting -->
+      <g transform="translate(0, 0)">
+        <rect x="0" y="0" width="150" height="28" rx="8" fill="#1e293b" stroke="#a855f7" stroke-width="1" stroke-opacity="0.4"/>
+        <text x="14" y="18" fill="#ddd6fe" class="font-mono" font-size="11" font-weight="600">∑ Math Never Split</text>
+      </g>
+
+      <!-- Chip 2: pedagogical block preservation -->
+      <g transform="translate(162, 0)">
+        <rect x="0" y="0" width="164" height="28" rx="8" fill="#1e293b" stroke="#22d3ee" stroke-width="1" stroke-opacity="0.4"/>
+        <text x="14" y="18" fill="#a5f3fc" class="font-mono" font-size="11" font-weight="600">§ Pedagogical Chunks</text>
+      </g>
+
+      <!-- Chip 3: dataset export -->
+      <g transform="translate(338, 0)">
+        <rect x="0" y="0" width="138" height="28" rx="8" fill="#1e293b" stroke="#34d399" stroke-width="1" stroke-opacity="0.4"/>
+        <text x="14" y="18" fill="#a7f3d0" class="font-mono" font-size="11" font-weight="600">☰ JSONL Datasets</text>
+      </g>
+
+      <!-- Chip 4: on-demand compilation of the catalog -->
+      <g transform="translate(488, 0)">
+        <rect x="0" y="0" width="112" height="28" rx="8" fill="#1e293b" stroke="#fbbf24" stroke-width="1" stroke-opacity="0.4"/>
+        <text x="14" y="18" fill="#fde68a" class="font-mono" font-size="11" font-weight="600">⚡ MCP Server</text>
+      </g>
+    </g>
+  </g>
+</svg>

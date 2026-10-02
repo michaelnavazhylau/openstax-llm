@@ -34,6 +34,9 @@ SCHEMA_PATH = SKILL_DIR / "assets" / "chunk.schema.json"
 CORE_PYPROJECT = REPO_ROOT / "packages" / "openstax-llm" / "pyproject.toml"
 MCP_PYPROJECT = REPO_ROOT / "packages" / "openstax-llm-mcp" / "pyproject.toml"
 
+README_PATH = REPO_ROOT / "README.md"
+LOGO_PATH = REPO_ROOT / "assets" / "logo.svg"
+
 #: A PEP 508 direct URL reference, e.g. `openstax-md @ git+https://...`.
 DIRECT_REFERENCE = re.compile(r"@\s*(git\+|https?://|file://)")
 
@@ -260,3 +263,33 @@ def test_uv_sources_are_workspace_local() -> None:
         sources = load_toml(path).get("tool", {}).get("uv", {}).get("sources", {})
         for target, spec in sources.items():
             assert spec == {"workspace": True}, f"{path.name}: unexpected source for {target}"
+
+
+# ------------------------------------------------------------------- README hero banner
+
+
+def test_readme_hero_logo_leads_the_file_and_resolves() -> None:
+    """The SVG banner leads the file, so a missing asset would be a broken front page."""
+    text = README_PATH.read_text(encoding="utf-8")
+    assert text.startswith('<div align="center">'), (
+        "README.md must open with the centred hero block"
+    )
+    assert '<img src="assets/logo.svg"' in text
+    for asset in re.findall(r'src="(assets/[\w./-]+)"', text):
+        assert (REPO_ROOT / asset).is_file(), f"README.md references a missing asset: {asset}"
+
+
+def test_logo_version_chip_matches_the_library_version() -> None:
+    """The banner prints a version, and the banner is not regenerated on release.
+
+    Without this the hero logo would advertise the version it was drawn at, for as long
+    as nobody looked at it.
+    """
+    chip = re.search(
+        r'text-anchor="middle">v(\d+\.\d+\.\d+)<', LOGO_PATH.read_text(encoding="utf-8")
+    )
+    assert chip, "assets/logo.svg no longer carries a vX.Y.Z version chip"
+    assert chip.group(1) == openstax_llm.__version__, (
+        f"assets/logo.svg advertises v{chip.group(1)} but the library is "
+        f"{openstax_llm.__version__}; redraw the version chip"
+    )

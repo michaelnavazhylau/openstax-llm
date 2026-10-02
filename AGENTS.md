@@ -69,6 +69,7 @@ openstax-llm/
 ├── pyproject.toml              # Workspace root: members, dependency-groups, ruff/mypy/pytest
 ├── uv.lock                     # Single lockfile for both members
 ├── AGENTS.md  README.md  LICENSE
+├── assets/logo.svg            # README hero banner; its version chip is drift-checked
 ├── Dockerfile                  # MCP server image; defaults to streamable HTTP on :8765
 ├── docs/PUBLISHING.md          # Release process and the current PyPI blocker
 ├── .pi/mcp.json                # Project-scoped MCP server registration (dogfooding)

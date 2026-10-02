@@ -1,4 +1,10 @@
-# openstax-llm 🧠📚
+<div align="center">
+
+<picture>
+  <img src="assets/logo.svg" alt="openstax-llm logo" width="100%" style="max-width: 880px;" />
+</picture>
+
+<br/><br/>
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://python.org)
 [![PyPI](https://img.shields.io/pypi/v/openstax-llm)](https://pypi.org/project/openstax-llm/)
@@ -7,7 +13,11 @@
 [![Powered by openstax-md](https://img.shields.io/badge/compiler-openstax--md-purple)](https://github.com/michaelnavazhylau/openstax-md)
 [![skills.sh](https://skills.sh/b/michaelnavazhylau/openstax-llm)](https://skills.sh/michaelnavazhylau/openstax-llm)
 
-**Pedagogical semantic chunking, RAG dataset preparation, and LLM fine-tuning pipelines from OpenStax textbooks.**
+<p align="center">
+  <strong>Pedagogical semantic chunking, RAG dataset preparation, and LLM fine-tuning pipelines from OpenStax textbooks.</strong>
+</p>
+
+</div>
 
 Built on top of [`openstax-md`](https://github.com/michaelnavazhylau/openstax-md), `openstax-llm`
 transforms OpenStax college textbooks into structured, citation-aware, formula-safe datasets
