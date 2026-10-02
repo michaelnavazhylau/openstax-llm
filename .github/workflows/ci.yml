@@ -68,7 +68,7 @@ jobs:
         # openstax-llm is allowed to carry its openstax-md git dependency for now; the
         # MCP distribution must stay completely clean. See docs/PUBLISHING.md.
         run: >-
-          python scripts/check_wheel_metadata.py
+          uv run python scripts/check_wheel_metadata.py
           --allow openstax-llm
           dist/openstax-llm/*.whl dist/openstax-llm-mcp/*.whl
 

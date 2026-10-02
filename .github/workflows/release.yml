@@ -65,7 +65,7 @@ jobs:
         # openstax-md is itself on PyPI. The release still completes and still attaches
         # the wheels; the publish jobs simply do not run.
         continue-on-error: true
-        run: python scripts/check_wheel_metadata.py dist/openstax-llm/*.whl dist/openstax-llm-mcp/*.whl
+        run: uv run python scripts/check_wheel_metadata.py dist/openstax-llm/*.whl dist/openstax-llm-mcp/*.whl
 
       - name: Upload distributions as workflow artifacts
         uses: actions/upload-artifact@v4
