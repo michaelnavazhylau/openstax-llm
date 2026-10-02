@@ -38,12 +38,12 @@ done
 case "${TARGET}" in
     pypi)
         PUBLISH_URL=""
-        TOKEN_VAR="UV_PUBLISH_TOKEN"
+        TOKEN_CANDIDATES=(UV_PUBLISH_TOKEN PYPI_API_TOKEN PYPI_TOKEN TWINE_PASSWORD)
         INDEX_CHECK="https://pypi.org"
         ;;
     testpypi)
         PUBLISH_URL="https://test.pypi.org/legacy/"
-        TOKEN_VAR="TEST_PYPI_TOKEN"
+        TOKEN_CANDIDATES=(TEST_PYPI_TOKEN TEST_PYPI_API_TOKEN TESTPYPI_TOKEN UV_PUBLISH_TOKEN_TESTPYPI)
         INDEX_CHECK="https://test.pypi.org"
         ;;
     *) echo "error: --target must be 'pypi' or 'testpypi', got '${TARGET}'" >&2; exit 2 ;;
@@ -58,9 +58,23 @@ fi
 # shellcheck disable=SC1090
 set -a && . "${ENV_FILE}" && set +a
 
-TOKEN="${!TOKEN_VAR:-}"
+# First non-empty candidate wins, matched by NAME. The value is never echoed.
+# Several names are accepted because the sibling openstax-md repository uses
+# PYPI_API_TOKEN / TEST_PI_API_TOKEN, so this script can point straight at that file via
+# --env-file rather than duplicating the secret into a second copy on disk.
+TOKEN=""
+TOKEN_VAR=""
+for candidate in "${TOKEN_CANDIDATES[@]}"; do
+    if [[ -n "${!candidate:-}" ]]; then
+        TOKEN="${!candidate}"
+        TOKEN_VAR="${candidate}"
+        break
+    fi
+done
+
 if [[ -z "${TOKEN}" ]]; then
-    echo "error: ${TOKEN_VAR} is empty in ${ENV_FILE}." >&2
+    echo "error: no token found in ${ENV_FILE}." >&2
+    echo "Looked for: ${TOKEN_CANDIDATES[*]}" >&2
     if [[ "${TARGET}" == "pypi" ]]; then
         echo "For a FIRST upload it must be scoped to \"Entire account (all projects)\":" >&2
         echo "a project-scoped token cannot exist before the project does." >&2
@@ -70,6 +84,12 @@ if [[ -z "${TOKEN}" ]]; then
         echo "(TestPyPI accounts are separate from PyPI accounts.)" >&2
     fi
     exit 1
+fi
+
+# Shape check only, so an obvious paste error surfaces before a 403. Never prints a value.
+if [[ "${TOKEN_VAR}" != "TWINE_PASSWORD" && "${TOKEN}" != pypi-* ]]; then
+    echo "warning: ${TOKEN_VAR} does not start with 'pypi-', which PyPI tokens normally do." >&2
+    echo "         Continuing; check for a stray quote or a truncated paste." >&2
 fi
 
 # Exported once so no token ever appears in argv, where `ps` would show it.
@@ -96,22 +116,42 @@ else
     MODE="DRY RUN (pass --execute to upload)"
 fi
 
-echo "Target:  ${TARGET}${PUBLISH_URL:+ (${PUBLISH_URL})}"
-echo "Version: ${CORE_VERSION}"
-echo "Mode:    ${MODE}"
+echo "Env file: ${ENV_FILE}"
+echo "Token:    \$${TOKEN_VAR} (value never printed)"
+echo "Target:   ${TARGET}${PUBLISH_URL:+ (${PUBLISH_URL})}"
+echo "Version:  ${CORE_VERSION}"
+echo "Mode:     ${MODE}"
 echo
 
 # A published version cannot be replaced, so check before spending time building.
+# The package must be visible at least once. Re-runs on TestPyPI are expected, so this
+# reports rather than refuses there.
+release_listed() {
+    # The JSON API reflects an upload immediately, whereas /simple/ can lag ~45s on
+    # TestPyPI. A single-shot /simple/ check therefore produces false negatives -- which
+    # is exactly what happened on the first rehearsal of this project.
+    curl -sf "${INDEX_CHECK}/pypi/$1/json" 2>/dev/null | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(1)
+releases = data.get('releases') or {}
+info = data.get('info') or {}
+version = '$2'
+raise SystemExit(0 if (version in releases or info.get('version') == version) else 1)
+"
+}
+
 echo "== Checking whether ${CORE_VERSION} is already published =="
 for pkg in openstax-llm openstax-llm-mcp; do
     if [[ "${TARGET}" == "testpypi" ]]; then
-        # TestPyPI re-runs are expected and harmless, so report rather than refuse.
-        if curl -s "${INDEX_CHECK}/simple/${pkg}/" | grep -q "${CORE_VERSION}"; then
+        if release_listed "${pkg}" "${CORE_VERSION}"; then
             echo "  ${pkg} ${CORE_VERSION}: already on TestPyPI (rehearsal re-run)"
         else
             echo "  ${pkg} ${CORE_VERSION}: not present"
         fi
-    elif curl -s "${INDEX_CHECK}/simple/${pkg}/" | grep -q "${CORE_VERSION}"; then
+    elif release_listed "${pkg}" "${CORE_VERSION}"; then
         echo "  ${pkg} ${CORE_VERSION} ALREADY EXISTS on PyPI." >&2
         echo "  The upload will be rejected. Bump the version in both pyproject.toml files," >&2
         echo "  their __version__ literals, and the skill's min_library_version." >&2
@@ -172,10 +212,19 @@ echo
 
 echo "== Verifying against the index =="
 for pkg in openstax-llm openstax-llm-mcp; do
-    if curl -s "${INDEX_CHECK}/simple/${pkg}/" | grep -q "${CORE_VERSION}"; then
-        echo "  ${pkg} ${CORE_VERSION}: confirmed"
-    else
-        echo "  ${pkg} ${CORE_VERSION}: NOT FOUND yet (indexes can lag; re-check shortly)" >&2
+    confirmed=0
+    for attempt in $(seq 1 12); do
+        if release_listed "${pkg}" "${CORE_VERSION}"; then
+            confirmed=1
+            echo "  ${pkg} ${CORE_VERSION}: confirmed (after ${attempt} check(s))"
+            break
+        fi
+        sleep 5
+    done
+    if [[ ${confirmed} -eq 0 ]]; then
+        echo "  ${pkg} ${CORE_VERSION}: NOT VISIBLE after 60s." >&2
+        echo "  The upload reported success, so check the project page before re-uploading:" >&2
+        echo "  ${INDEX_CHECK}/project/${pkg}/" >&2
     fi
 done
 

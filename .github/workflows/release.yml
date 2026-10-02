@@ -234,23 +234,49 @@ jobs:
           enable-cache: true
 
       - name: Confirm both projects actually landed on TestPyPI
-        # Independent of the action's own exit status: ask the index.
+        # Independent of the action's own exit status: ask the index. The JSON API is the
+        # right probe here because /simple/ can lag ~45s behind an upload on TestPyPI, so a
+        # single-shot /simple/ check reports false negatives.
         run: |
           version=$(python3 -c "
           import tomllib, pathlib
           print(tomllib.loads(pathlib.Path('packages/openstax-llm/pyproject.toml').read_text())['project']['version'])
           ")
           for pkg in openstax-llm openstax-llm-mcp; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "https://test.pypi.org/simple/${pkg}/")
+            found=0
+            for attempt in $(seq 1 12); do
+              if curl -sf "https://test.pypi.org/pypi/${pkg}/json" 2>/dev/null | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          releases = data.get('releases') or {}
+          raise SystemExit(0 if '$version' in releases else 1)
+          " 2>/dev/null; then
+                echo "${pkg} ${version}: present on TestPyPI (check ${attempt})"
+                found=1
+                break
+              fi
+              sleep 5
+            done
+            if [ "$found" != "1" ]; then
+              echo "::error::${pkg} ${version} not visible on TestPyPI after 60s"
+              exit 1
+            fi
+          done
+
+      - name: Confirm the simple index serves them (what an installer reads)
+        # The install below also exercises this, but failing here names the cause directly.
+        run: |
+          for pkg in openstax-llm openstax-llm-mcp; do
+            for attempt in $(seq 1 12); do
+              code=$(curl -s -o /dev/null -w '%{http_code}' "https://test.pypi.org/simple/${pkg}/")
+              [ "$code" = "200" ] && break
+              sleep 5
+            done
             if [ "$code" != "200" ]; then
-              echo "::error::${pkg} not found on TestPyPI (HTTP ${code})"
+              echo "::error::https://test.pypi.org/simple/${pkg}/ returned HTTP ${code} after 60s"
               exit 1
             fi
-            if ! curl -s "https://test.pypi.org/simple/${pkg}/" | grep -q "${version}"; then
-              echo "::error::${pkg} is on TestPyPI but version ${version} is not"
-              exit 1
-            fi
-            echo "${pkg} ${version}: present on TestPyPI"
+            echo "${pkg}: simple index serving (HTTP 200)"
           done
 
       - name: Install the MCP package from TestPyPI and run it
