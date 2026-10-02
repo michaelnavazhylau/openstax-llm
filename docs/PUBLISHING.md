@@ -2,21 +2,34 @@
 
 How to release `openstax-llm` and `openstax-llm-mcp` to PyPI.
 
-## Status: ready to publish
+## Status: 0.1.0 is live
 
-The blocker is cleared. `openstax-md` is on PyPI at **0.2.0**, so `openstax-llm` now depends
-on it by abstract version range (`openstax-md>=0.2.0`) instead of a git URL, and both wheels
-pass the metadata gate:
+| Package | Version | Published via |
+|---|---|---|
+| [`openstax-llm`](https://pypi.org/project/openstax-llm/) | 0.1.0 | account-scoped token (`scripts/publish_local.sh`) |
+| [`openstax-llm-mcp`](https://pypi.org/project/openstax-llm-mcp/) | 0.1.0 | account-scoped token (`scripts/publish_local.sh`) |
 
-```
-openstax_llm-0.1.0-py3-none-any.whl: openstax-llm (1 requirement(s))
-  openstax-md>=0.2.0
-openstax_llm_mcp-0.1.0-py3-none-any.whl: openstax-llm-mcp (2 requirement(s))
-  mcp<3,>=2.0.0
-  openstax-llm>=0.1.0
-```
+Verified after upload by installing into a clean venv straight from PyPI, with no git and no
+extra index: both console scripts run and the MCP server completes an `initialize` +
+`tools/list` handshake.
 
-### Why this mattered
+### Outstanding follow-ups
+
+1. **Narrow the token.** `PYPI_API_TOKEN` in `~/Code/openstax-md/pypi-creds.env` is
+   account-scoped, so it can publish to every project on the account. Create a project-scoped
+   token per project and revoke the account-scoped one.
+2. **Tag the release.** `v0.1.0` does not exist yet; tag the commit and attach the built
+   distributions so the git history matches what is on PyPI.
+3. **Move CI to Trusted Publishing.** Now that the projects exist you are registering
+   *normal* publishers, not pending ones, so both projects **may share a single environment**
+   and a single publish job. The four distinct environments in `release.yml` exist only to
+   work around the pending-publisher uniqueness constraint and can be collapsed.
+4. **Any future change needs a version bump**, including `packages/*/pyproject.toml`, the
+   `__version__` literals, and the skill's `min_library_version`.
+
+The rest of this document records what was involved, so the next release is routine.
+
+## The blocker that had to go first
 
 PyPI rejects any distribution whose `Requires-Dist` holds a PEP 508 direct URL, server-side
 and without recourse:
@@ -28,9 +41,11 @@ and without recourse:
 
 `twine check` does **not** detect it — it validates only the README and long description — so
 the failure appeared after the tag was cut. PEP 508 states that public index servers SHOULD
-NOT allow direct references, so this is a permanent constraint, not a bug to wait out.
-`openstax-llm-mcp` was clean all along but transitively blocked: publishing it alone would
-have shipped a package that could not be installed.
+NOT allow direct references, so this was never going to be fixed upstream.
+
+`openstax-llm` therefore could not be published at all while `openstax-md` was git-only, and
+`openstax-llm-mcp` was blocked with it: publishing the MCP package alone would have shipped
+something uninstallable. Publishing `openstax-md` to PyPI resolved both.
 
 Reproduce the gate at any time:
 
@@ -45,14 +60,24 @@ No member is on that list.
 
 ## Confirm the names are free
 
-Both were unregistered at the time of writing.
+Only relevant for a new project. Both were unregistered before 0.1.0.
 
 | Name | PyPI | TestPyPI |
 |---|---|---|
-| `openstax-llm` | free | free |
-| `openstax-llm-mcp` | free | free |
+| `openstax-llm` | taken (this project) | taken (rehearsal) |
+| `openstax-llm-mcp` | taken (this project) | taken (rehearsal) |
 
-Re-check before registering, because of the caveat below.
+Check with the endpoints that are not behind bot protection:
+
+```bash
+for p in openstax-llm openstax-llm-mcp; do
+  curl -s -o /dev/null -w "$p: %{http_code}\n" "https://pypi.org/simple/$p/"
+done
+```
+
+> Do **not** probe with `pypi.org/project/<name>/`. It sits behind bot protection and returns
+> HTTP 200 for *everything*, including names that do not exist. That cost me a false
+> name-conflict scare during setup.
 
 ## Choose a publishing path
 

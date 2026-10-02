@@ -213,7 +213,7 @@ echo
 echo "== Verifying against the index =="
 for pkg in openstax-llm openstax-llm-mcp; do
     confirmed=0
-    for attempt in $(seq 1 12); do
+    for attempt in $(seq 1 24); do
         if release_listed "${pkg}" "${CORE_VERSION}"; then
             confirmed=1
             echo "  ${pkg} ${CORE_VERSION}: confirmed (after ${attempt} check(s))"
@@ -222,7 +222,7 @@ for pkg in openstax-llm openstax-llm-mcp; do
         sleep 5
     done
     if [[ ${confirmed} -eq 0 ]]; then
-        echo "  ${pkg} ${CORE_VERSION}: NOT VISIBLE after 60s." >&2
+        echo "  ${pkg} ${CORE_VERSION}: NOT VISIBLE after 120s." >&2
         echo "  The upload reported success, so check the project page before re-uploading:" >&2
         echo "  ${INDEX_CHECK}/project/${pkg}/" >&2
     fi

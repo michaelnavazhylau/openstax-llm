@@ -244,7 +244,7 @@ jobs:
           ")
           for pkg in openstax-llm openstax-llm-mcp; do
             found=0
-            for attempt in $(seq 1 12); do
+            for attempt in $(seq 1 24); do
               if curl -sf "https://test.pypi.org/pypi/${pkg}/json" 2>/dev/null | python3 -c "
           import json, sys
           data = json.load(sys.stdin)
@@ -258,7 +258,7 @@ jobs:
               sleep 5
             done
             if [ "$found" != "1" ]; then
-              echo "::error::${pkg} ${version} not visible on TestPyPI after 60s"
+              echo "::error::${pkg} ${version} not visible on TestPyPI after 120s"
               exit 1
             fi
           done
@@ -267,13 +267,13 @@ jobs:
         # The install below also exercises this, but failing here names the cause directly.
         run: |
           for pkg in openstax-llm openstax-llm-mcp; do
-            for attempt in $(seq 1 12); do
+            for attempt in $(seq 1 24); do
               code=$(curl -s -o /dev/null -w '%{http_code}' "https://test.pypi.org/simple/${pkg}/")
               [ "$code" = "200" ] && break
               sleep 5
             done
             if [ "$code" != "200" ]; then
-              echo "::error::https://test.pypi.org/simple/${pkg}/ returned HTTP ${code} after 60s"
+              echo "::error::https://test.pypi.org/simple/${pkg}/ returned HTTP ${code} after 120s"
               exit 1
             fi
             echo "${pkg}: simple index serving (HTTP 200)"

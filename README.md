@@ -1,6 +1,8 @@
 # openstax-llm 🧠📚
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://python.org)
+[![PyPI](https://img.shields.io/pypi/v/openstax-llm)](https://pypi.org/project/openstax-llm/)
+[![PyPI - MCP](https://img.shields.io/pypi/v/openstax-llm-mcp?label=openstax-llm-mcp)](https://pypi.org/project/openstax-llm-mcp/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Powered by openstax-md](https://img.shields.io/badge/compiler-openstax--md-purple)](https://github.com/michaelnavazhylau/openstax-md)
 
@@ -57,17 +59,17 @@ uv tool install openstax-llm
 uvx openstax-llm-mcp
 ```
 
-Until the first release is published to PyPI, install from git instead:
-
-```bash
-uv add "git+https://github.com/michaelnavazhylau/openstax-llm.git#subdirectory=packages/openstax-llm"
-uvx --from "git+https://github.com/michaelnavazhylau/openstax-llm.git#subdirectory=packages/openstax-llm-mcp" openstax-llm-mcp
-```
-
 Or run the container:
 
 ```bash
 docker build -t openstax-llm-mcp .
+```
+
+To track an unreleased commit instead, install from git:
+
+```bash
+uv add "git+https://github.com/michaelnavazhylau/openstax-llm.git#subdirectory=packages/openstax-llm"
+uvx --from "git+https://github.com/michaelnavazhylau/openstax-llm.git#subdirectory=packages/openstax-llm-mcp" openstax-llm-mcp
 ```
 
 ---
