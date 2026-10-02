@@ -1,16 +1,24 @@
 name: Release
 
 # Triggered by publishing a GitHub Release, so the tag is cut once and every artifact
-# derives from it.
+# derives from it. `workflow_dispatch` exists so a release can be rehearsed on TestPyPI
+# without consuming a version on the real index.
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
-      dry-run:
-        description: Build and verify only; never upload
-        type: boolean
-        default: true
+      target:
+        description: What to do
+        type: choice
+        # A choice, not a boolean: `gh workflow run -f dry-run=false` sends the string
+        # "false", and a non-empty string is easy to interpret as truthy. A named target
+        # has no such ambiguity, and makes "upload to the real PyPI" an explicit verb.
+        options:
+          - build-only
+          - testpypi
+          - pypi
+        default: build-only
 
 permissions:
   contents: read
@@ -59,11 +67,11 @@ jobs:
           uv build --package openstax-llm-mcp --out-dir dist/openstax-llm-mcp
 
       - name: Check wheel metadata for PyPI blockers
-        id: metadata
-        # A hard gate: PyPI rejects any distribution declaring a PEP 508 direct URL
-        # dependency, irrevocably, and `twine check` does not detect it. This used to be
-        # expected red while openstax-md was git-only; now it must pass.
-        run: uv run python scripts/check_wheel_metadata.py dist/openstax-llm/*.whl dist/openstax-llm-mcp/*.whl
+        # A hard gate. PyPI rejects any distribution declaring a PEP 508 direct URL
+        # dependency, irrevocably, and `twine check` does not detect it.
+        run: >-
+          uv run python scripts/check_wheel_metadata.py
+          dist/openstax-llm/*.whl dist/openstax-llm-mcp/*.whl
 
       - name: Upload distributions as workflow artifacts
         uses: actions/upload-artifact@v4
@@ -77,38 +85,34 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${GITHUB_REF_NAME}" dist/openstax-llm/* dist/openstax-llm-mcp/* --clobber
 
-      - name: Report uploadability
+      - name: Summarize
         run: |
-          if [ "${{ steps.metadata.outcome }}" = "success" ]; then
-            echo "Artifacts are PyPI-clean; publish jobs run when PYPI_PUBLISH_ENABLED is true." >> "$GITHUB_STEP_SUMMARY"
-          else
-            {
-              echo "### Release stopped: artifacts are not PyPI-uploadable"
-              echo
-              echo 'A wheel declares a PEP 508 direct URL dependency, which PyPI rejects'
-              echo 'server-side. See `docs/PUBLISHING.md`. The wheels are attached to the'
-              echo 'GitHub Release, but nothing will be uploaded to PyPI.'
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-    outputs:
-      metadata_ok: ${{ steps.metadata.outcome }}
+          count=$(find dist -type f \( -name '*.whl' -o -name '*.tar.gz' \) | wc -l | tr -d ' ')
+          {
+            echo "### Built ${count} artifacts"
+            echo
+            echo "Metadata gate: passed (no direct URL dependencies)."
+            echo
+            echo "Trigger: \`${{ github.event_name }}\`"
+            echo "Target: \`${{ inputs.target || 'release' }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   publish-core:
-    name: Publish openstax-llm
+    name: Publish openstax-llm to PyPI
     needs: build
-    # Two independent switches, both required: the artifacts must be free of direct URL
-    # dependencies, and the repository variable must be set so that enabling publishing is
-    # a deliberate, auditable change rather than a side effect of cutting a release.
+    # Three independent switches, all required:
+    #   * the metadata gate must have passed;
+    #   * the repository variable must be set, so enabling uploads is a deliberate,
+    #     auditable change and not a side effect of cutting a release;
+    #   * the run must either be a real release or an explicit target=pypi dispatch.
     if: >-
-      needs.build.outputs.metadata_ok == 'success'
-      && vars.PYPI_PUBLISH_ENABLED == 'true'
-      && (github.event_name == 'release' || inputs.dry-run == false)
+      vars.PYPI_PUBLISH_ENABLED == 'true'
+      && (github.event_name == 'release' || inputs.target == 'pypi')
     runs-on: ubuntu-latest
-    # This environment name must match the trusted publisher registered on PyPI for
-    # openstax-llm, and it must DIFFER from the MCP project's environment: PyPI's pending
-    # publisher uniqueness constraint covers (owner, repo, workflow, environment) and not
-    # the project name, so two projects sharing all four cannot both be registered.
+    # Must match the trusted publisher registered on PyPI for openstax-llm, and must DIFFER
+    # from the MCP project's environment: PyPI's pending-publisher uniqueness constraint
+    # covers (owner, repo, workflow, environment) and not the project name, so two projects
+    # sharing all four cannot both be registered.
     environment:
       name: pypi-openstax-llm
       url: https://pypi.org/project/openstax-llm/
@@ -132,12 +136,11 @@ jobs:
           skip-existing: false
 
   publish-mcp:
-    name: Publish openstax-llm-mcp
+    name: Publish openstax-llm-mcp to PyPI
     needs: build
     if: >-
-      needs.build.outputs.metadata_ok == 'success'
-      && vars.PYPI_PUBLISH_ENABLED == 'true'
-      && (github.event_name == 'release' || inputs.dry-run == false)
+      vars.PYPI_PUBLISH_ENABLED == 'true'
+      && (github.event_name == 'release' || inputs.target == 'pypi')
     runs-on: ubuntu-latest
     environment:
       name: pypi-openstax-llm-mcp
@@ -162,9 +165,7 @@ jobs:
   testpypi:
     name: Rehearse on TestPyPI
     needs: build
-    if: >-
-      github.event_name == 'workflow_dispatch'
-      && inputs.dry-run == false
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
     runs-on: ubuntu-latest
     environment:
       name: testpypi
@@ -172,6 +173,15 @@ jobs:
     permissions:
       id-token: write
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
       - name: Download distributions
         uses: actions/download-artifact@v4
         with:
@@ -179,34 +189,85 @@ jobs:
           path: dist/
 
       - name: Publish openstax-llm to TestPyPI
-        # Rehearses the real upload. Any direct URL dependency or metadata problem fails
-        # here, while the version number is still disposable.
-        continue-on-error: true
+        # Deliberately NOT continue-on-error. A rehearsal that stays green while uploading
+        # nothing is worse than no rehearsal: it manufactures false confidence.
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: dist/openstax-llm/
+          # Re-running a rehearsal is normal, and the version is disposable here.
           skip-existing: true
 
       - name: Publish openstax-llm-mcp to TestPyPI
-        continue-on-error: true
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: dist/openstax-llm-mcp/
           skip-existing: true
 
-      - name: Verify the MCP package installs from TestPyPI
-        # --index-url points only at TestPyPI, which cannot satisfy openstax-llm until it
-        # is published there too, so this reports rather than gates.
-        continue-on-error: true
+      - name: Confirm both projects actually landed on TestPyPI
+        # Independent of the action's own exit status: ask the index.
         run: |
+          version=$(python3 -c "
+          import tomllib, pathlib
+          print(tomllib.loads(pathlib.Path('packages/openstax-llm/pyproject.toml').read_text())['project']['version'])
+          ")
+          for pkg in openstax-llm openstax-llm-mcp; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://test.pypi.org/simple/${pkg}/")
+            if [ "$code" != "200" ]; then
+              echo "::error::${pkg} not found on TestPyPI (HTTP ${code})"
+              exit 1
+            fi
+            if ! curl -s "https://test.pypi.org/simple/${pkg}/" | grep -q "${version}"; then
+              echo "::error::${pkg} is on TestPyPI but version ${version} is not"
+              exit 1
+            fi
+            echo "${pkg} ${version}: present on TestPyPI"
+          done
+
+      - name: Install the MCP package from TestPyPI and run it
+        # The real proof: a consumer's install path. openstax-llm resolves from TestPyPI
+        # (just uploaded); openstax-md resolves from the real PyPI.
+        run: |
+          version=$(python3 -c "
+          import tomllib, pathlib
+          print(tomllib.loads(pathlib.Path('packages/openstax-llm-mcp/pyproject.toml').read_text())['project']['version'])
+          ")
           uv venv /tmp/verify
           uv pip install --python /tmp/verify/bin/python \
             --index-url https://test.pypi.org/simple/ \
             --extra-index-url https://pypi.org/simple/ \
-            "openstax-llm-mcp==$(python3 -c "
-          import tomllib, pathlib
-          print(tomllib.loads(pathlib.Path('packages/openstax-llm-mcp/pyproject.toml').read_text())['project']['version'])
-          ")"
+            "openstax-llm-mcp==${version}"
+
+          # Both console scripts must exist and start.
+          /tmp/verify/bin/openstax-llm --version
           /tmp/verify/bin/openstax-llm-mcp --version
+
+          # And the server must complete a real MCP handshake over stdio.
+          {
+            printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}'
+            sleep 1
+            printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+            sleep 1
+            printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+            sleep 2
+          } | /tmp/verify/bin/openstax-llm-mcp --log-level ERROR | tee /tmp/handshake.jsonl
+
+          grep -q '"name":"openstax-llm"' /tmp/handshake.jsonl || { echo "::error::bad initialize result"; exit 1; }
+          grep -q '"search_catalog"' /tmp/handshake.jsonl || { echo "::error::tools/list missing search_catalog"; exit 1; }
+
+      - name: Summarize the rehearsal
+        run: |
+          {
+            echo "### TestPyPI rehearsal passed"
+            echo
+            echo "Both projects uploaded, verified present on the index by version, and"
+            echo "\`openstax-llm-mcp\` installed and completed an MCP handshake from TestPyPI."
+            echo
+            echo "Install it yourself with:"
+            echo '```bash'
+            echo "uv venv /tmp/tp && uv pip install --python /tmp/tp/bin/python \\"
+            echo "  --index-url https://test.pypi.org/simple/ \\"
+            echo "  --extra-index-url https://pypi.org/simple/ openstax-llm-mcp"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
