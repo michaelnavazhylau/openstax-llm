@@ -41,6 +41,12 @@ Or install as a standalone CLI tool:
 uv tool install git+https://github.com/michaelnavazhylau/openstax-llm.git
 ```
 
+Or run via Docker without local Python installation:
+
+```bash
+docker build -t openstax-llm .
+```
+
 ---
 
 ## 💻 CLI Usage
@@ -54,6 +60,26 @@ openstax-llm info astronomy-2e
 
 # 3. Prepare and chunk a textbook directly into a JSONL dataset
 openstax-llm prepare calculus-volume-1 -o datasets/calculus_v1.jsonl --target-words 400
+```
+
+---
+
+## 🐳 Docker Usage
+
+You can run `openstax-llm` in a container without configuring a local Python environment:
+
+```bash
+# Build the Docker image
+docker build -t openstax-llm .
+
+# Search the catalog
+docker run --rm openstax-llm search physics
+
+# Inspect textbook chunk statistics
+docker run --rm openstax-llm info astronomy-2e
+
+# Prepare a textbook and output JSONL to your current working directory
+docker run --rm -v $(pwd):/data openstax-llm prepare calculus-volume-1 -o calculus_v1.jsonl
 ```
 
 ---
