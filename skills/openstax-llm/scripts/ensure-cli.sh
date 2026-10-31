@@ -4,6 +4,12 @@
 #
 # Exit codes: 0 = ready, 1 = missing or too old (after attempting an install).
 #
+# Installs come from PyPI by name and nowhere else. There is deliberately no `git+https://`
+# fallback: it would resolve the repository's default branch at the moment an agent runs this
+# script, so an upstream push — not a release — would decide what the agent installs. A skill
+# audit of this repository reported that shape as Snyk W012 ("unverifiable external
+# dependency: runtime URL that controls agent").
+#
 # The skill and the library are versioned independently: `skills add` copies this
 # directory and hashes it, so an installed skill can outlive the library it documents.
 # SKILL.md frontmatter records `metadata.min_library_version` and this script enforces it.
@@ -12,7 +18,6 @@ set -euo pipefail
 
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SKILL_MD="${SKILL_DIR}/SKILL.md"
-GIT_URL="https://github.com/michaelnavazhylau/openstax-llm.git"
 
 min_version() {
     # Read metadata.min_library_version without requiring a YAML parser.
@@ -53,26 +58,23 @@ installed_version() {
 }
 
 install_cli() {
-    echo "openstax-llm not found. Installing." >&2
+    # Output is left visible on purpose: when the index is unreachable or behind a proxy, the
+    # resolver's own message is the only thing that says why the install failed.
+    echo "openstax-llm not found. Installing from PyPI." >&2
     if command -v uv >/dev/null 2>&1; then
-        if uv tool install openstax-llm >/dev/null 2>&1; then
+        if uv tool install openstax-llm; then
             return 0
         fi
-        # Fallback for when the release is not on PyPI yet, or the index is unreachable.
-        # uv resolves a workspace member through the `subdirectory` fragment: the
-        # repository root is a virtual workspace, not a package.
-        uv tool install \
-            "git+${GIT_URL}#subdirectory=packages/openstax-llm" >/dev/null 2>&1
-        return
-    fi
-    if command -v pipx >/dev/null 2>&1; then
-        if pipx install openstax-llm >/dev/null 2>&1; then
+    elif command -v pipx >/dev/null 2>&1; then
+        if pipx install openstax-llm; then
             return 0
         fi
-        pipx install "git+${GIT_URL}#subdirectory=packages/openstax-llm" >/dev/null 2>&1
-        return
+    else
+        echo "error: neither uv nor pipx is available. Install uv: https://docs.astral.sh/uv/" >&2
+        return 1
     fi
-    echo "error: neither uv nor pipx is available. Install uv: https://docs.astral.sh/uv/" >&2
+    echo "error: 'openstax-llm' could not be installed from PyPI. Check network or proxy" >&2
+    echo "settings, or run 'uv tool install openstax-llm' by hand to see the index error." >&2
     return 1
 }
 

@@ -5,11 +5,16 @@
 # Registration is a user-visible change, so this script reports what it did and how to
 # undo it. It never installs anything on its own beyond the MCP server command itself.
 #
+# The registered command is always the PyPI release (`uvx openstax-llm-mcp`). There is no
+# `git+https://` fallback: it would resolve the default branch when the agent starts the
+# server, so an upstream push — not a release — would control what the agent runs. A skill
+# audit of this repository reported that shape as Snyk W012 ("unverifiable external
+# dependency: runtime URL that controls agent").
+#
 # Usage: install-mcp.sh [--agent pi|claude-code|print] [--scope project|user]
 
 set -euo pipefail
 
-GIT_URL="https://github.com/michaelnavazhylau/openstax-llm.git"
 SERVER_NAME="openstax-llm"
 
 AGENT=""
@@ -29,14 +34,9 @@ if [[ "${SCOPE}" != "project" && "${SCOPE}" != "user" ]]; then
     exit 2
 fi
 
-# Prefer PyPI; fall back to the workspace member via the `subdirectory` fragment.
 # Prints a '|'-separated argv: the command first, then its arguments.
 server_argv() {
-    if uvx openstax-llm-mcp --version >/dev/null 2>&1; then
-        printf 'uvx|openstax-llm-mcp'
-    else
-        printf 'uvx|--from|git+%s#subdirectory=packages/openstax-llm-mcp|openstax-llm-mcp' "${GIT_URL}"
-    fi
+    printf 'uvx|openstax-llm-mcp'
 }
 
 print_config() {
@@ -44,8 +44,8 @@ print_config() {
     local -a argv
     read -r -a argv <<<"$(server_argv)"
 
-    # Generate the JSON with Python rather than string surgery, so the fallback's many
-    # arguments stay separate array elements instead of one malformed string.
+    # Generate the JSON with Python rather than string surgery, so the argv stays separate
+    # array elements instead of one malformed string.
     python3 -c '
 import json, sys
 
@@ -70,8 +70,8 @@ register_pi() {
     echo "Registering with Pi (scope: ${SCOPE})"
     # `uvx` fetches and caches the server on first use.
     if ! uvx openstax-llm-mcp --version >/dev/null 2>&1; then
-        echo "  Note: 'uvx openstax-llm-mcp' did not resolve just now. If the release is not"
-        echo "  on PyPI yet, register the git form printed by 'install-mcp.sh --agent print'."
+        echo "  Note: 'uvx openstax-llm-mcp' did not resolve just now. Once the index is"
+        echo "  reachable, refresh it with 'uvx --refresh openstax-llm-mcp --version'."
     fi
     local scope_flag=()
     [[ "${SCOPE}" == "project" ]] && scope_flag=(-l)

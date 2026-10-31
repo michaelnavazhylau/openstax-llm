@@ -76,11 +76,13 @@ Or run the container:
 docker build -t openstax-llm-mcp .
 ```
 
-To track an unreleased commit instead, install from git:
+Every released artifact comes from PyPI; nothing here asks you to install from a URL. To work
+against an unreleased checkout, clone the repository and install the workspace members in
+place:
 
 ```bash
-uv add "git+https://github.com/michaelnavazhylau/openstax-llm.git#subdirectory=packages/openstax-llm"
-uvx --from "git+https://github.com/michaelnavazhylau/openstax-llm.git#subdirectory=packages/openstax-llm-mcp" openstax-llm-mcp
+git clone https://github.com/michaelnavazhylau/openstax-llm.git
+cd openstax-llm && uv sync --all-groups --all-packages
 ```
 
 ---
