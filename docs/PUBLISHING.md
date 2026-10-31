@@ -283,9 +283,9 @@ that disagrees with its own artifacts cannot be undone on PyPI.
 ## After the first release
 
 - `uv add openstax-llm` and `uvx openstax-llm-mcp` start working, which is what the README,
-  the MCP README, and the skill's `ensure-cli.sh` already assume. They all try PyPI first and
-  fall back to git, so nothing needs editing — the fallback just stops being used.
-- Add PyPI badges and drop the "from git" instructions from the root README.
+  the MCP README, and the skill's `ensure-cli.sh` already assume.
+- The PyPI badges are in and the root README documents no `git+https` install; the skill
+  scripts lost their git fallback too. See "The skill installs from PyPI only" below.
 - PyPI's **pending publisher becomes a normal publisher** after first use; no further setup.
 - Publishing a version is irreversible. Bump, don't overwrite: `skip-existing` is deliberately
   `false` in `release.yml` so a partial or duplicate upload fails loudly rather than silently.
@@ -301,6 +301,28 @@ commit or the tests fail before the tag does:
 - `packages/openstax-llm-mcp/pyproject.toml`
 - `packages/openstax-llm/src/openstax_llm/__init__.py` (`__version__`)
 - `packages/openstax-llm-mcp/src/openstax_llm_mcp/_version.py` (fallback literal)
+
+## The skill installs from PyPI only
+
+The skill's `ensure-cli.sh` and `install-mcp.sh` used to fall back to
+`git+https://github.com/michaelnavazhylau/openstax-llm.git#subdirectory=…` whenever the PyPI
+path failed. That fallback resolved the default branch at the moment an agent ran it, so an
+upstream push — not a release — decided what the agent installed. An audit of the skill
+reported it as **Snyk W012: unverifiable external dependency (runtime URL that controls
+agent)**, medium risk, which is a fair reading: the skill tells an agent to execute a script,
+and that script's fetch is part of the agent's trust boundary.
+
+Both fallbacks are gone. The scripts install `openstax-llm` / start `uvx openstax-llm-mcp`
+from PyPI by name and surface the index's own error if that fails. For an unreleased build,
+install from a checkout you already have rather than from a URL:
+
+```bash
+git clone https://github.com/michaelnavazhylau/openstax-llm.git
+uv tool install ./openstax-llm/packages/openstax-llm
+```
+
+`tests/test_skill_contract.py` fails if a runtime install URL comes back, so the finding
+cannot reappear unnoticed.
 
 ## Historical note: the old blocker
 

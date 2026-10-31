@@ -265,6 +265,50 @@ def test_uv_sources_are_workspace_local() -> None:
             assert spec == {"workspace": True}, f"{path.name}: unexpected source for {target}"
 
 
+# ------------------------------------------------------------------ skill install scripts
+
+SKILL_SCRIPTS_DIR = SKILL_DIR / "scripts"
+
+#: A URL that installs code while a script runs, e.g. `git+https://…` or `pip install https://…`.
+RUNTIME_INSTALL_URL = re.compile(r"git\+|(?:pip|pipx|uv|uvx)\s+(?:tool\s+)?install\s+https?://")
+
+
+def test_skill_scripts_install_only_from_pypi() -> None:
+    """The skill must never fetch a package from a URL while an agent is running.
+
+    A `git+https://…` install resolves a mutable branch at the moment the script executes, so
+    an upstream push — not a release — would control what the agent installs. A skill audit of
+    this repository reported that shape as Snyk W012 (medium: "unverifiable external
+    dependency, runtime URL that controls agent"). Both members are on PyPI, so the scripts
+    install by name and fail loudly instead.
+    """
+    scripts = sorted(SKILL_SCRIPTS_DIR.glob("*.sh"))
+    assert scripts, "the skill's scripts/ directory is empty"
+
+    offenders: list[str] = []
+    for path in scripts:
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue
+            if RUNTIME_INSTALL_URL.search(line):
+                offenders.append(f"{path.name}:{number}: {line.strip()}")
+
+    assert offenders == [], (
+        "skill scripts install code from a URL at runtime; install the PyPI release by name "
+        "instead:\n" + "\n".join(offenders)
+    )
+
+
+def test_skill_scripts_still_install_the_published_packages() -> None:
+    """Dropping the URL fallback must not drop the ability to install at all."""
+    ensure = (SKILL_SCRIPTS_DIR / "ensure-cli.sh").read_text(encoding="utf-8")
+    install = (SKILL_SCRIPTS_DIR / "install-mcp.sh").read_text(encoding="utf-8")
+
+    assert "uv tool install openstax-llm" in ensure
+    assert "pipx install openstax-llm" in ensure
+    assert "uvx openstax-llm-mcp" in install
+
+
 # ------------------------------------------------------------------- README hero banner
 
 
