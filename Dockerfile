@@ -1,17 +1,24 @@
 # syntax=docker/dockerfile:1
 
-ARG PYTHON_VERSION=3.12
+# Base images are pinned by digest, not by tag alone. A published image is only as
+# reproducible as its inputs, and `python:3.12-slim-bookworm` / `uv:latest` are mutable refs:
+# whichever push happened last would silently decide what a `v0.1.0` container contains.
+# Refresh both deliberately when bumping, then re-run the CI image jobs:
+#   docker buildx imagetools inspect python:3.12-slim-bookworm
+#   docker buildx imagetools inspect ghcr.io/astral-sh/uv:latest
 
 # -----------------------------------------------------------------------------
 # Stage 1: Build the workspace virtual environment with uv
 # -----------------------------------------------------------------------------
-FROM python:${PYTHON_VERSION}-slim-bookworm AS builder
+FROM python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337 AS builder
 
-# Install uv binary from the official Astral image
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+# Install uv binary from the official Astral image (pinned by digest, see above).
+COPY --from=ghcr.io/astral-sh/uv:latest@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 /uv /uvx /bin/
 
-# git and ca-certificates are required to fetch the openstax-md git dependency and to
-# clone textbooks on demand.
+# ca-certificates is required for every HTTPS fetch. git is required at runtime — the first
+# use of a book clones its repository — so it is installed here and carried through by the
+# runtime stage's own layer; the builder keeps it too, because a dependency that shells out
+# to git must still be installable from source.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
@@ -43,11 +50,21 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # -----------------------------------------------------------------------------
 # Stage 2: Minimal runtime image
 # -----------------------------------------------------------------------------
-FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
+FROM python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337 AS runtime
+
+# Provenance labels. `source` is what links the GHCR package back to this repository —
+# without it the package is an orphan that nobody can trace to a commit. VERSION and
+# REVISION are supplied by release.yml from the tag and the commit it was cut from.
+ARG VERSION=0.0.0-dev
+ARG REVISION=unknown
 
 LABEL org.opencontainers.image.title="openstax-llm-mcp" \
       org.opencontainers.image.description="MCP server for pedagogical OpenStax textbook chunking and RAG dataset preparation" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.source="https://github.com/michaelnavazhylau/openstax-llm" \
+      org.opencontainers.image.documentation="https://github.com/michaelnavazhylau/openstax-llm#readme" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}"
 
 # git is needed at runtime: the first use of a book clones its repository.
 RUN apt-get update && apt-get install -y --no-install-recommends \

@@ -324,6 +324,53 @@ uv tool install ./openstax-llm/packages/openstax-llm
 `tests/test_skill_contract.py` fails if a runtime install URL comes back, so the finding
 cannot reappear unnoticed.
 
+## Containers: GHCR only
+
+`release.yml` publishes `ghcr.io/michaelnavazhylau/openstax-llm-mcp` from a tagged GitHub
+Release, gated on the repository variable `CONTAINER_PUBLISH_ENABLED=true`
+(`gh variable set CONTAINER_PUBLISH_ENABLED --body true`). `-f target=image` publishes from
+the dispatched commit for a rehearsal; that path emits a `sha-<12>` tag only, never a version
+tag and never `latest`.
+
+**Why not Docker Hub.** Hub needs an account-scoped PAT stored as a secret — the same shape
+of credential this project removed from its PyPI path in favour of Trusted Publishing — and
+caps anonymous pulls at 100 per 6h per IP, which a classroom or CI fleet will hit. GHCR uses
+`GITHUB_TOKEN`, links the package to this repository through the
+`org.opencontainers.image.source` label, and takes SLSA provenance and an SBOM as build-push
+action flags (`provenance: mode=max`, `sbom: true`). If Hub reach is ever genuinely needed,
+mirror the *same digest* rather than rebuilding; do not add it as a second build.
+
+**Tag policy.**
+
+| Tag | Written by | Meaning |
+|---|---|---|
+| `0.1.0` | release | that release |
+| `sha-abc1234` | release and dispatch | that commit |
+| `latest` | release only, non-prerelease | most recent release; never moved backwards |
+
+**Pin digests in deployments.** Tags are mutable on every registry. `release.yml` records the
+index digest in the job output and the run summary; pin that:
+
+```bash
+docker pull ghcr.io/michaelnavazhylau/openstax-llm-mcp@sha256:<digest>
+```
+
+The `verify-image` job pulls the digest back on a fresh runner, runs both console scripts,
+checks the OCI labels, and completes an MCP `initialize` — the container counterpart of
+`testpypi-verify`. An image that was only built locally has not been proven to be the thing a
+consumer pulls.
+
+**One manual step after the first push.** A package created by `GITHUB_TOKEN` starts private,
+and no workflow can flip that. Set *Packages → openstax-llm-mcp → Package settings → Change
+visibility → Public*. Until then `verify-image`'s final step warns that anonymous pulls fail;
+it is warn-only on purpose, because a red job for a state CI cannot fix gets ignored. The
+README's `docker pull` only works afterwards.
+
+**Base images.** `Dockerfile` pins `python` and the `astral-sh/uv` image by digest, because an
+image is only as reproducible as its inputs; a `latest` base means whichever upstream push
+happened last decides what `v0.1.0` contains. Refresh them deliberately with
+`docker buildx imagetools inspect <ref>` and re-run the CI image jobs, which are the gate.
+
 ## Historical note: the old blocker
 
 While `openstax-md` was git-only, `packages/openstax-llm/pyproject.toml` declared

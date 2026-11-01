@@ -16,6 +16,7 @@ on:
         # has no such ambiguity, and makes "upload to the real PyPI" an explicit verb.
         options:
           - build-only
+          - image
           - testpypi
           - pypi
         default: build-only
@@ -161,6 +162,211 @@ jobs:
           packages-dir: dist/openstax-llm-mcp/
           attestations: true
           skip-existing: false
+
+  publish-image:
+    name: Publish the MCP container to GHCR
+    needs: build
+    # GHCR rather than Docker Hub. GITHUB_TOKEN needs no stored secret (Docker Hub needs an
+    # account-scoped PAT, the same class of credential this repository removed from its PyPI
+    # path), the package inherits the repository's provenance, and GHCR has no anonymous
+    # pull cap — Docker Hub allows 100 unpulls per 6h per IP, which is a hard ceiling for a
+    # tool meant to run on classroom and CI machines.
+    #
+    # Two switches, matching publish-core's pattern: the repository variable makes publishing
+    # a deliberate, auditable change, and the run must be a real release or target=image.
+    if: >-
+      vars.CONTAINER_PUBLISH_ENABLED == 'true'
+      && (github.event_name == 'release' || inputs.target == 'image')
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+      version: ${{ steps.meta.outputs.version }}
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io
+      id-token: write # provenance
+      attestations: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        # arm64 is emulated at build time. Required, not optional: the lock resolves
+        # aarch64 wheels for lxml/cryptography/cffi, and every Apple-silicon user would
+        # otherwise run an amd64 image under emulation.
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/openstax-llm-mcp
+          # Exactly three tags: the release version, the commit, and `latest`. `latest` is
+          # enabled only for a real, non-prerelease GitHub Release, so it can never be
+          # moved by a dispatch from an arbitrary commit, and never moves backwards.
+          tags: |
+            type=semver,pattern={{version}}
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.event_name == 'release' && !contains(github.ref_name, '-') }}
+          # `source` is the one label metadata-action cannot guess here: it derives the label
+          # from the image name (`openstax-llm-mcp`), which is not the repository name
+          # (`openstax-llm`), so the guessed link would 404 and orphan the package. The rest
+          # (title/description/licenses/version/revision) come from the Dockerfile.
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            REVISION=${{ github.sha }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summarize
+        run: |
+          {
+            echo "### Published ${{ steps.meta.outputs.version }} to GHCR"
+            echo
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+            echo
+            echo "Digest: \`${{ steps.push.outputs.digest }}\` — pin deployments to it;"
+            echo "tags are mutable on every registry."
+            echo
+            echo "Platforms: linux/amd64, linux/arm64"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  verify-image:
+    name: Pull the published container and run it
+    needs: publish-image
+    # Same switch as publish-image. Verification happens from a fresh runner against the
+    # registry, because an image that was only ever built locally has not been proven to be
+    # the thing a consumer pulls. This is the container equivalent of testpypi-verify.
+    if: >-
+      vars.CONTAINER_PUBLISH_ENABLED == 'true'
+      && (github.event_name == 'release' || inputs.target == 'image')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Log in to GHCR
+        # Authentication is not a workaround: a package created by GITHUB_TOKEN starts
+        # private, so an anonymous pull would fail until the visibility is flipped by hand.
+        # See the containers section of docs/PUBLISHING.md.
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull the digest that was just pushed
+        run: |
+          docker pull "$IMAGE"
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/openstax-llm-mcp@${{ needs.publish-image.outputs.digest }}
+
+      - name: Check both console scripts survived packaging
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/openstax-llm-mcp@${{ needs.publish-image.outputs.digest }}
+        run: |
+          docker run --rm --entrypoint openstax-llm "$IMAGE" --version
+          docker run --rm --entrypoint openstax-llm "$IMAGE" search calculus
+
+      - name: Check the provenance labels
+        # `source` is what links the GHCR package to this repository. Without it the
+        # published image is an orphan that nobody can trace to a commit.
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/openstax-llm-mcp@${{ needs.publish-image.outputs.digest }}
+        run: |
+          label() { docker inspect --format "{{ index .Config.Labels \"$1\" }}" "$IMAGE"; }
+          test "$(label org.opencontainers.image.source)" = "https://github.com/${{ github.repository }}" || {
+            echo "::error::image is not linked to this repository"; label org.opencontainers.image.source; exit 1; }
+          test "$(label org.opencontainers.image.version)" = "${{ needs.publish-image.outputs.version }}" || {
+            echo "::error::image version label does not match the release"; exit 1; }
+          test "$(label org.opencontainers.image.revision)" = "${{ github.sha }}" || {
+            echo "::error::image revision label does not match the commit"; exit 1; }
+          echo "labels ok: $(label org.opencontainers.image.version) @ $(label org.opencontainers.image.revision)"
+
+      - name: Verify the server answers an MCP initialize over HTTP
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/openstax-llm-mcp@${{ needs.publish-image.outputs.digest }}
+        run: |
+          docker run -d --name mcp -p 127.0.0.1:8765:8765 "$IMAGE"
+
+          for _ in $(seq 1 30); do
+            if curl -sf -o /dev/null -X POST http://127.0.0.1:8765/mcp \
+              -H 'Content-Type: application/json' \
+              -H 'Accept: application/json, text/event-stream' \
+              -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"release-verify","version":"0"}}}'; then
+              echo "server is up"
+              break
+            fi
+            sleep 2
+          done
+
+          response=$(curl -s -X POST http://127.0.0.1:8765/mcp \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"release-verify","version":"0"}}}')
+
+          echo "$response"
+          echo "$response" | grep -q '"name":"openstax-llm"' || {
+            echo "::error::unexpected initialize result"; docker logs mcp; exit 1; }
+
+          docker rm -f mcp
+
+      - name: Report whether anonymous pulls work yet
+        # Warn-only on purpose. A GHCR package created by GITHUB_TOKEN is private until the
+        # visibility is flipped by hand, and no workflow can flip it; a red job here would be
+        # permanent noise for a state CI cannot fix. Once the package is public, this step
+        # proves the path a consumer actually takes.
+        continue-on-error: true
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/openstax-llm-mcp@${{ needs.publish-image.outputs.digest }}
+        run: |
+          docker logout ghcr.io
+          docker pull "$IMAGE" || {
+            echo "::warning::anonymous pull failed; is the GHCR package still private?"
+            echo "Set it under Packages -> openstax-llm-mcp -> Package settings -> Change visibility."
+            exit 1
+          }
+          echo "anonymous pull works: the image is publicly consumable"
+
+      - name: Summarize
+        run: |
+          {
+            echo "### Container verification passed"
+            echo
+            echo "Pulled \`${{ needs.publish-image.outputs.digest }}\` from ghcr.io, ran both"
+            echo "console scripts, checked the OCI labels, and completed an MCP initialize."
+            echo
+            echo '```bash'
+            echo "docker run --rm -p 8765:8765 \\"
+            echo "  ghcr.io/${{ github.repository_owner }}/openstax-llm-mcp:${{ needs.publish-image.outputs.version }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   testpypi-core:
     name: Rehearse openstax-llm on TestPyPI

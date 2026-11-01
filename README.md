@@ -70,15 +70,23 @@ uv tool install openstax-llm
 uvx openstax-llm-mcp
 ```
 
-Or run the container:
+Or run the container, published from this repository to GitHub Container Registry:
+
+```bash
+docker run --rm -p 8765:8765 ghcr.io/michaelnavazhylau/openstax-llm-mcp:0.1.0
+```
+
+The image is pushed on every tagged release for `linux/amd64` and `linux/arm64`, with
+`latest` tracking the most recent non-prerelease. Pin the version tag, or better the digest,
+for anything reproducible. To build from source instead:
 
 ```bash
 docker build -t openstax-llm-mcp .
 ```
 
-Every released artifact comes from PyPI; nothing here asks you to install from a URL. To work
-against an unreleased checkout, clone the repository and install the workspace members in
-place:
+Every released Python artifact comes from PyPI, and the container from GHCR; nothing here
+asks you to install code from a URL. To work against an unreleased checkout, clone the
+repository and install the workspace members in place:
 
 ```bash
 git clone https://github.com/michaelnavazhylau/openstax-llm.git
