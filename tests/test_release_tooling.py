@@ -199,6 +199,23 @@ def test_dockerfile_links_the_image_to_this_repository() -> None:
     assert 'org.opencontainers.image.revision="${REVISION}"' in dockerfile
 
 
+def test_anonymous_pull_probe_drops_the_cached_image_first() -> None:
+    """The probe must not be satisfied by the authenticated pull that ran before it.
+
+    The first version logged out and pulled but never reached the registry: the image was
+    already in the daemon, so docker reported "Image is up to date" and the step passed
+    vacuously. Removing the local copy is what makes the check mean something.
+    """
+    workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    start = workflow.index("Report whether anonymous pulls work yet")
+    step = workflow[start : workflow.index("\n      - name:", start)]
+    assert "docker logout ghcr.io" in step
+    assert "docker image rm" in step, (
+        "the anonymous-pull probe no longer removes the local image, so it can pass without "
+        "contacting the registry"
+    )
+
+
 def test_readme_pins_the_published_image_to_the_current_version() -> None:
     """The front page is not regenerated on release, so the tag is drift-checked here."""
     readme = README.read_text(encoding="utf-8")
