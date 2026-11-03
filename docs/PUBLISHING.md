@@ -360,11 +360,12 @@ checks the OCI labels, and completes an MCP `initialize` — the container count
 `testpypi-verify`. An image that was only built locally has not been proven to be the thing a
 consumer pulls.
 
-**One manual step after the first push.** A package created by `GITHUB_TOKEN` starts private,
-and no workflow can flip that. Set *Packages → openstax-llm-mcp → Package settings → Change
-visibility → Public*. Until then `verify-image`'s final step warns that anonymous pulls fail;
-it is warn-only on purpose, because a red job for a state CI cannot fix gets ignored. The
-README's `docker pull` only works afterwards.
+**Visibility.** This repository's package published **public**, verified by an anonymous pull
+of the digest (see below). GHCR packages created by `GITHUB_TOKEN` are private by default in
+the general case, and no workflow can change visibility, so if a future package does start
+private: *Packages → openstax-llm-mcp → Package settings → Change visibility → Public*. Until
+then the anonymous-pull step warns instead of failing, because a red job for a state CI
+cannot fix gets ignored.
 
 **Base images.** `Dockerfile` pins `python` and the `astral-sh/uv` image by digest, because an
 image is only as reproducible as its inputs; a `latest` base means whichever upstream push

@@ -338,20 +338,27 @@ jobs:
           docker rm -f mcp
 
       - name: Report whether anonymous pulls work yet
-        # Warn-only on purpose. A GHCR package created by GITHUB_TOKEN is private until the
-        # visibility is flipped by hand, and no workflow can flip it; a red job here would be
-        # permanent noise for a state CI cannot fix. Once the package is public, this step
-        # proves the path a consumer actually takes.
+        # Warn-only on purpose: if the package is private, a red job would be permanent noise
+        # for a state CI cannot fix. Both members are public today, so this normally passes.
+        #
+        # It must be a *fresh* pull. The first version of this step logged out and pulled, and
+        # reported success even though it never contacted the registry: the image was already
+        # in the daemon from the authenticated verification pull, so docker answered "Status:
+        # Image is up to date" from local state. Dropping the local copy first is what makes
+        # the check mean anything.
         continue-on-error: true
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/openstax-llm-mcp@${{ needs.publish-image.outputs.digest }}
         run: |
           docker logout ghcr.io
-          docker pull "$IMAGE" || {
-            echo "::warning::anonymous pull failed; is the GHCR package still private?"
+          # Remove every local reference to the digest so the pull cannot short-circuit.
+          docker image rm --force "$IMAGE" >/dev/null 2>&1 || true
+          if ! docker pull "$IMAGE"; then
+            echo "::warning::anonymous pull failed; the GHCR package is not public."
             echo "Set it under Packages -> openstax-llm-mcp -> Package settings -> Change visibility."
             exit 1
-          }
+          fi
+          docker image inspect "$IMAGE" >/dev/null
           echo "anonymous pull works: the image is publicly consumable"
 
       - name: Summarize
