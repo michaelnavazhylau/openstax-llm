@@ -67,3 +67,7 @@ files = ["packages/openstax-llm/src", "packages/openstax-llm-mcp/src"]
 [tool.pytest.ini_options]
 testpaths = ["packages/openstax-llm/tests", "packages/openstax-llm-mcp/tests", "tests"]
 python_files = ["test_*.py"]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
